@@ -48,6 +48,7 @@ const themeColorLabels = {
   danger_light: 'colorDangerLight', warning: 'colorWarning', warning_light: 'colorWarningLight',
 };
 const hex = /^#[\da-f]{6}$/i;
+const hotspotHostname = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const feedbackIds = [
   'upload-feedback', 'login-feedback', 'theme-feedback', 'manage-feedback',
@@ -540,6 +541,7 @@ async function refreshDashboard() {
       dashboard = showingPrevious ? { ...dashboard, printer_error: next.printer_error, demo: next.demo } : next;
       dashboardFailed = false;
       element('demo-indicator').hidden = !dashboard.demo;
+      if (adminSettings) renderHotspotAddresses();
       optionalText('connection-error', showingPrevious ? `${next.printer_error} ${t('stale')}` : next.printer_error);
       renderPrinters();
     } catch (error) {
@@ -608,7 +610,7 @@ function showSession(nextSession) {
     passwordChangeForm.reset();
     serverSettingsForm.querySelector('fieldset').disabled = true;
     hotspotForm.querySelector('fieldset').disabled = true;
-    renderHotspotChange();
+    renderHotspotAddresses();
     updateThemeButtons();
   }
   renderJobs();
@@ -677,19 +679,18 @@ function renderServerSettings(settings, preserveFields) {
 }
 
 function renderHotspotSettings(ap, preserveFields) {
-  if (ap?.error && hotspotChange) {
-    hotspotChange = null;
-    renderHotspotChange();
-  }
+  if (ap?.error) hotspotChange = null;
   hotspotForm.querySelector('fieldset').disabled = !ap?.available || !!ap.pending;
   if (!preserveFields) {
     hotspotForm.elements.ssid.value = ap?.ssid ?? '';
+    hotspotForm.elements.hostname.value = ap?.hostname ?? '';
     hotspotForm.elements.port.value = ap?.port ?? '';
     hotspotForm.elements.secured.checked = ap?.secured ?? false;
     hotspotForm.elements.password.value = '';
   }
   toggleHotspotPassword();
-  if (hotspotChange) renderHotspotChange();
+  renderHotspotAddresses();
+  if (hotspotChange) renderHotspotFeedback();
   else if (ap?.pending) feedback('hotspot-feedback', t('hotspotPending'));
   else feedback('hotspot-feedback', ap?.error || (ap?.available ? '' : t('hotspotUnavailable')), ap?.error ? 'error' : '');
 }
@@ -985,24 +986,34 @@ async function saveServerSettings(event) {
   }
 }
 
-function renderHotspotChange() {
-  const address = element('hotspot-address');
-  if (!hotspotChange) {
-    address.hidden = true;
-    address.removeAttribute('href');
-    return;
-  }
-  feedback('hotspot-feedback', t('hotspotSaved', { ssid: hotspotChange.ssid }), 'success');
+function renderHotspotAddress(id, value) {
+  const address = element(id);
+  address.removeAttribute('href');
+  address.parentElement.hidden = true;
   try {
-    const url = new URL(hotspotChange.url);
-    address.hidden = !['http:', 'https:'].includes(url.protocol);
-    if (!address.hidden) {
-      address.href = url.href;
-      address.textContent = url.href;
-    }
+    const url = new URL(value);
+    if (url.protocol !== 'http:') return false;
+    address.textContent = url.href;
+    address.parentElement.hidden = false;
+    if (dashboard?.demo === false) address.href = url.href;
+    return true;
   } catch {
-    address.hidden = true;
+    return false;
   }
+}
+
+function renderHotspotAddresses() {
+  const ap = adminSettings?.ap;
+  const current = hotspotChange ?? (ap?.available ? ap : null);
+  const direct = renderHotspotAddress('hotspot-address', current?.url);
+  const local = renderHotspotAddress('hotspot-local-address', current?.local_url);
+  element('hotspot-addresses').hidden = !direct && !local;
+}
+
+function renderHotspotFeedback() {
+  if (dashboard?.demo) feedback('hotspot-feedback', t('demoAddresses'), 'success');
+  else if (hotspotChange.reconnect) feedback('hotspot-feedback', t('hotspotSaved', { ssid: hotspotChange.ssid }), 'success');
+  else feedback('hotspot-feedback', t('hotspotOpenAddress'), 'success');
 }
 
 function followHotspotChange(attempt = 0) {
@@ -1021,10 +1032,15 @@ function followHotspotChange(attempt = 0) {
 
 async function saveHotspot(event) {
   event.preventDefault();
-  const { ssid, port, secured, password } = hotspotForm.elements;
+  const { ssid, hostname, port, secured, password } = hotspotForm.elements;
   const fieldset = hotspotForm.querySelector('fieldset');
   if (fieldset.disabled) return;
-  const body = { ssid: ssid.value, port: port.valueAsNumber, secured: secured.checked };
+  if (!hotspotHostname.test(hostname.value)) {
+    feedback('hotspot-feedback', t('localHostnameHelp'), 'error');
+    hostname.focus();
+    return;
+  }
+  const body = { ssid: ssid.value, port: port.valueAsNumber, secured: secured.checked, hostname: hostname.value.toLowerCase() };
   const ap = adminSettings?.ap;
   const passwordRequired = !ap?.secured || ap.ssid !== body.ssid;
   if (body.port === 80) {
@@ -1037,15 +1053,18 @@ async function saveHotspot(event) {
     feedback('hotspot-feedback', t('invalidHotspot'), 'error');
     return;
   }
-  if (!window.confirm(t('confirmHotspot'))) return;
   if (body.secured && password.value) body.password = password.value;
+  const reconnect = ap?.ssid !== body.ssid || ap?.secured !== body.secured || Boolean(body.password);
+  if ((reconnect || ap?.port !== body.port) && !window.confirm(t('confirmHotspot'))) return;
   fieldset.disabled = true;
   feedback('hotspot-feedback');
   try {
     const change = await request('/api/admin/ap', { method: 'PUT', body, admin: true });
-    hotspotChange = change;
+    hotspotChange = { ...change, reconnect };
+    hostname.value = change.hostname ?? body.hostname;
     password.value = '';
-    renderHotspotChange();
+    renderHotspotAddresses();
+    renderHotspotFeedback();
     followHotspotChange();
   } catch (error) {
     adminError('hotspot-feedback', error);

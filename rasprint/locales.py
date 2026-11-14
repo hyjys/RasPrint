@@ -1,12 +1,20 @@
 # Japanese, Simplified Chinese, Spanish, French, German, Russian.
 TRANSLATIONS = {
-    "Port 80 is reserved for rasprint.local.": (
-        "ポート 80 は rasprint.local のアクセス用です。",
-        "端口 80 保留给 rasprint.local。",
-        "El puerto 80 está reservado para rasprint.local.",
-        "Le port 80 est réservé à rasprint.local.",
-        "Port 80 ist für rasprint.local reserviert.",
-        "Порт 80 зарезервирован для rasprint.local.",
+    "Port 80 is reserved for the .local address.": (
+        "ポート 80 は .local アドレス用です。",
+        "端口 80 保留给 .local 地址。",
+        "El puerto 80 está reservado para la dirección .local.",
+        "Le port 80 est réservé à l’adresse .local.",
+        "Port 80 ist für die .local-Adresse reserviert.",
+        "Порт 80 зарезервирован для адреса .local.",
+    ),
+    "Use 1–63 ASCII letters, digits, or hyphens, with no hyphen at either end.": (
+        "半角英数字とハイフンを使って 1～63 文字で入力してください。先頭と末尾にハイフンは使えません。",
+        "请输入 1–63 个 ASCII 字母、数字或连字符，首尾不能是连字符。",
+        "Usa de 1 a 63 letras ASCII, dígitos o guiones. El primer y el último carácter no pueden ser guiones.",
+        "Utilisez 1 à 63 lettres ASCII, chiffres ou tirets. Le premier et le dernier caractère ne peuvent pas être des tirets.",
+        "1 bis 63 ASCII-Buchstaben, Ziffern oder Bindestriche eingeben. Am Anfang und Ende sind keine Bindestriche erlaubt.",
+        "Используйте от 1 до 63 латинских букв, цифр или дефисов. Дефис не может стоять в начале или в конце.",
     ),
     "The admin request is too large.": (
         "管理者リクエストが大きすぎます。",

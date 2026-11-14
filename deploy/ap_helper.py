@@ -17,8 +17,8 @@ from time import sleep
 from uuid import UUID
 
 from rasprint.ap import (
-    AP_ADDRESS, DEFAULT_NETWORK, AccessPointError, apply_result, network_values,
-    receive_packet, send_packet, status_result,
+    AP_ADDRESS, DEFAULT_NETWORK, HOSTNAME_FILE, AccessPointError, apply_result,
+    configured_hostname, network_values, receive_packet, send_packet, status_result,
 )
 
 PROFILE = Path("/etc/NetworkManager/system-connections/rasprint-ap.nmconnection")
@@ -57,9 +57,9 @@ def write_file(path: Path, value: bytes | None, mode: int = 0o600) -> None:
         os.close(directory)
 
 
-def read_drop_in() -> bytes | None:
+def optional_file(path: Path) -> bytes | None:
     try:
-        return DROP_IN.read_bytes()
+        return path.read_bytes()
     except FileNotFoundError:
         return None
 
@@ -84,12 +84,12 @@ def read_profile():
     else:
         ssid = raw_ssid
     secured = config.get("wifi-security", "key-mgmt", fallback="none") == "wpa-psk"
-    drop_in = read_drop_in()
+    drop_in = optional_file(DROP_IN)
     match = re.search(rb"^ListenStream=10\.42\.0\.1:(\d{1,5})$", drop_in or b"", re.MULTILINE)
     if drop_in and not match:
         raise ValueError("Unexpected socket configuration")
     port = int(match.group(1)) if match else DEFAULT_NETWORK["port"]
-    return contents, config, uuid, network_values(ssid, secured, None, port), drop_in
+    return contents, config, uuid, network_values(ssid, secured, None, port, configured_hostname()), drop_in
 
 
 def modify_profile(config, network: dict, password: str | None) -> bytes:
@@ -160,6 +160,12 @@ def restore(backup: dict) -> None:
             reload_profile(backup["uuid"], backup["was_active"])
         except (OSError, subprocess.SubprocessError) as exc:
             failures.append(exc)
+    if backup.get("hostname_changed"):
+        try:
+            previous = backup["hostname_file"]
+            write_file(HOSTNAME_FILE, b64decode(previous) if previous is not None else None, 0o644)
+        except OSError as exc:
+            failures.append(exc)
     if failures:
         raise RuntimeError("The RasPrint AP could not be rolled back") from failures[0]
     write_file(JOURNAL, None)
@@ -185,44 +191,51 @@ class Helper:
         try:
             _, _, _, network, _ = read_profile()
         except AccessPointError as exc:
-            return status_result(DEFAULT_NETWORK, available=False, error=exc.code)
+            return status_result(
+                {**DEFAULT_NETWORK, "hostname": configured_hostname()}, available=False, error=exc.code,
+            )
         except (OSError, ValueError, KeyError):
-            return status_result(DEFAULT_NETWORK, available=False, error="read")
+            return status_result({**DEFAULT_NETWORK, "hostname": configured_hostname()}, available=False, error="read")
         with self.lock:
             return status_result(network, pending=self.pending, error=self.error)
 
     def prepare(self, request: dict):
         ssid, secured, password, port = (request.get(key) for key in ("ssid", "secured", "password", "port"))
-        network = network_values(ssid, secured, password, port)
+        network = network_values(ssid, secured, password, port, request.get("hostname"))
         with self.lock:
             if self.pending:
                 raise AccessPointError("busy")
             if JOURNAL.exists():
                 raise AccessPointError("rollback")
             original, config, uuid, previous, previous_drop_in = read_profile()
+            hostname = network.setdefault("hostname", previous["hostname"])
+            hostname_changed = hostname != previous["hostname"]
             ssid_changed = previous["ssid"] != ssid
             if secured and not password and (ssid_changed or not previous["secured"]):
                 raise AccessPointError("missing_password")
             wifi_changed = ssid_changed or previous["secured"] != secured or bool(secured and password)
             port_changed = previous["port"] != port
-            if not (wifi_changed or port_changed):
+            if not (wifi_changed or port_changed or hostname_changed):
                 return apply_result(network), None
             if port_changed:
                 port_available(port)
             new_profile = modify_profile(config, network, password) if wifi_changed else None
             drop_in = f"[Socket]\nListenStream=\nListenStream={AP_ADDRESS}:{port}\n".encode("ascii")
+            previous_hostname = optional_file(HOSTNAME_FILE) if hostname_changed else None
             backup = {
                 "profile": b64encode(original).decode("ascii"),
                 "drop_in": b64encode(previous_drop_in).decode("ascii") if previous_drop_in is not None else None,
                 "uuid": uuid, "was_active": bool(wifi_changed and active_on_wlan(uuid)),
                 "port_changed": port_changed, "wifi_changed": wifi_changed,
+                "hostname_changed": hostname_changed,
+                "hostname_file": b64encode(previous_hostname).decode("ascii") if previous_hostname is not None else None,
             }
             self.pending = True
             self.error = None
-        worker = Thread(target=self.commit, args=(new_profile, drop_in, backup), daemon=True)
+        worker = Thread(target=self.commit, args=(new_profile, drop_in, hostname, backup), daemon=True)
         return apply_result(network), worker
 
-    def commit(self, new_profile: bytes | None, drop_in: bytes, backup: dict) -> None:
+    def commit(self, new_profile: bytes | None, drop_in: bytes, hostname: str, backup: dict) -> None:
         # Give the web server time to deliver the destination URL before disrupting clients.
         sleep(2)
         try:
@@ -232,6 +245,8 @@ class Helper:
             if new_profile is not None:
                 write_file(PROFILE, new_profile)
                 reload_profile(backup["uuid"], backup["was_active"])
+            if backup["hostname_changed"]:
+                write_file(HOSTNAME_FILE, f"{hostname}\n".encode("ascii"), 0o644)
             write_file(JOURNAL, None)
         except Exception:
             log.exception("Could not apply the AP configuration")

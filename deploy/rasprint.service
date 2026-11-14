@@ -11,7 +11,8 @@ User=rasprint
 Group=rasprint
 WorkingDirectory=/opt/rasprint
 Environment=RASPRINT_STATE_DIR=/var/lib/rasprint
-Environment=RASPRINT_ALLOWED_HOSTS=rasprint.local,10.42.0.1
+Environment=RASPRINT_ALLOWED_HOSTS=10.42.0.1
+Environment=RASPRINT_DYNAMIC_AP_HOST=true
 Environment=CUPS_SERVER=/run/cups/cups.sock
 Environment=PYTHONDONTWRITEBYTECODE=1
 EnvironmentFile=/etc/rasprint/rasprint.env

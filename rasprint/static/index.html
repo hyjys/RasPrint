@@ -196,13 +196,17 @@
               <form id="hotspot-form" class="card-body" novalidate>
                 <fieldset class="form-fields admin-fields" disabled>
                   <label class="field"><span data-i18n="ssid"></span><input name="ssid" maxlength="32" autocomplete="off" spellcheck="false" required></label>
+                  <label class="field" for="hotspot-hostname"><span data-i18n="localHostname"></span><span class="hotspot-hostname"><input id="hotspot-hostname" name="hostname" maxlength="63" placeholder="rasprint" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="hotspot-hostname-help" required><span aria-hidden="true">.local</span></span><small id="hotspot-hostname-help" data-i18n="localHostnameHelp"></small></label>
                   <label class="field"><span id="hotspot-port-label" data-i18n="webPort"></span><input name="port" type="number" min="1" max="65535" step="1" inputmode="numeric" aria-labelledby="hotspot-port-label" aria-describedby="hotspot-port-help" required><small id="hotspot-port-help" data-i18n="directPortHelp"></small></label>
                   <label class="setting-check"><input name="secured" type="checkbox"> <span data-i18n="secured"></span></label>
                   <label id="hotspot-password-field" class="field" hidden><span id="hotspot-password-label" data-i18n="apPassword"></span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="63" aria-labelledby="hotspot-password-label" aria-describedby="hotspot-password-help"><small id="hotspot-password-help" data-i18n="apPasswordHelp"></small></label>
                   <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="applyHotspot"></button></div>
                 </fieldset>
                 <p id="hotspot-feedback" class="feedback settings-feedback" role="status"></p>
-                <a id="hotspot-address" class="hotspot-address" hidden></a>
+                <div id="hotspot-addresses" class="hotspot-addresses" hidden>
+                  <div><span data-i18n="localAddress"></span><a id="hotspot-local-address" class="hotspot-address"></a></div>
+                  <div><span data-i18n="directAddress"></span><a id="hotspot-address" class="hotspot-address"></a></div>
+                </div>
               </form>
             </section>
 

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import re
 import socket
 from threading import Lock
@@ -6,13 +7,21 @@ from threading import Lock
 
 AP_ADDRESS = "10.42.0.1"
 AP_SOCKET = "/run/rasprint-ap.sock"
-DEFAULT_NETWORK = {"ssid": "RasPrint", "secured": True, "port": 8000}
+HOSTNAME_FILE = Path("/etc/systemd/system/rasprint.socket.d/hostname")
+DEFAULT_HOSTNAME = "rasprint"
+DEFAULT_NETWORK = {"ssid": "RasPrint", "secured": True, "port": 8000, "hostname": DEFAULT_HOSTNAME}
+HOST_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 ERRORS = {
     "ssid": (422, "AP 이름은 제어 문자 없이 UTF-8 기준 1~32바이트여야 합니다.",
              "The network name must contain 1–32 UTF-8 bytes and no control characters."),
     "secured": (422, "올바른 Wi-Fi 보안 설정을 선택하세요.", "Enter a valid Wi-Fi security setting."),
     "port": (422, "HTTP 포트는 1~65535 사이여야 합니다.", "The HTTP port must be between 1 and 65535."),
-    "proxy_port": (422, "80번 포트는 rasprint.local에서 사용합니다.", "Port 80 is reserved for rasprint.local."),
+    "proxy_port": (422, "80번 포트는 .local 주소에 사용합니다.", "Port 80 is reserved for the .local address."),
+    "hostname": (
+        422,
+        ".local 앞 이름은 영문, 숫자, 하이픈으로 1~63자여야 하며 하이픈으로 시작하거나 끝날 수 없습니다.",
+        "Use 1–63 ASCII letters, digits, or hyphens, with no hyphen at either end.",
+    ),
     "password": (422, "Wi-Fi 비밀번호는 출력 가능한 ASCII 문자 8~63자여야 합니다.",
                  "The Wi-Fi password must contain 8–63 printable ASCII characters."),
     "missing_password": (422, "WPA2를 켜거나 보호된 AP 이름을 바꾸려면 Wi-Fi 비밀번호를 입력하세요.",
@@ -40,7 +49,22 @@ class AccessPointError(Exception):
         super().__init__(korean)
 
 
-def network_values(ssid: str, secured: bool, password: str | None, port: int) -> dict:
+def normalize_hostname(value: str) -> str:
+    if not isinstance(value, str) or not HOST_LABEL.fullmatch(value):
+        raise AccessPointError("hostname")
+    return value.lower()
+
+
+def configured_hostname() -> str:
+    try:
+        return normalize_hostname(HOSTNAME_FILE.read_text(encoding="ascii").strip())
+    except (AccessPointError, OSError, UnicodeError):
+        return DEFAULT_HOSTNAME
+
+
+def network_values(
+    ssid: str, secured: bool, password: str | None, port: int, hostname: str | None = None,
+) -> dict:
     if not isinstance(ssid, str) or not ssid.isprintable():
         raise AccessPointError("ssid")
     if not ssid.strip() or len(ssid.encode("utf-8")) > 32:
@@ -53,18 +77,25 @@ def network_values(ssid: str, secured: bool, password: str | None, port: int) ->
         raise AccessPointError("proxy_port")
     if password is not None and (not isinstance(password, str) or (password and not re.fullmatch(r"[ -~]{8,63}", password))):
         raise AccessPointError("password")
-    return {"ssid": ssid, "secured": secured, "port": port}
+    values = {"ssid": ssid, "secured": secured, "port": port}
+    if hostname is not None:
+        values["hostname"] = normalize_hostname(hostname)
+    return values
+
+
+def local_url(network: dict) -> str:
+    return f"http://{network['hostname']}.local/"
 
 
 def apply_result(network: dict) -> dict:
     port = network["port"]
-    return {**network, "url": f"http://{AP_ADDRESS}:{port}/"}
+    return {**network, "url": f"http://{AP_ADDRESS}:{port}/", "local_url": local_url(network)}
 
 
 def status_result(network: dict, *, available: bool = True, pending: bool = False, error: str | None = None) -> dict:
     failure = AccessPointError(error) if error else None
     return {
-        **network, "available": available, "pending": pending,
+        **apply_result(network), "available": available, "pending": pending,
         "error": str(failure) if failure else None,
         "error_english": failure.english if failure else None,
     }
@@ -113,10 +144,12 @@ class AccessPoint:
         try:
             return self._request({"action": "status"})
         except AccessPointError as exc:
-            return status_result(DEFAULT_NETWORK, available=False, error=exc.code)
+            return status_result(
+                {**DEFAULT_NETWORK, "hostname": configured_hostname()}, available=False, error=exc.code,
+            )
 
-    def apply(self, ssid: str, secured: bool, password: str | None, port: int) -> dict:
-        values = network_values(ssid, secured, password, port)
+    def apply(self, ssid: str, secured: bool, password: str | None, port: int, hostname: str | None = None) -> dict:
+        values = network_values(ssid, secured, password, port, hostname)
         return self._request({"action": "apply", **values, "password": password})
 
 
@@ -129,10 +162,10 @@ class DemoAccessPoint:
         with self.lock:
             return status_result(self.network)
 
-    def apply(self, ssid: str, secured: bool, password: str | None, port: int) -> dict:
-        values = network_values(ssid, secured, password, port)
+    def apply(self, ssid: str, secured: bool, password: str | None, port: int, hostname: str | None = None) -> dict:
+        values = network_values(ssid, secured, password, port, hostname)
         with self.lock:
             if secured and not password and (not self.network["secured"] or ssid != self.network["ssid"]):
                 raise AccessPointError("missing_password")
-            self.network = values
-            return apply_result(values)
+            self.network.update(values)
+            return apply_result(self.network)

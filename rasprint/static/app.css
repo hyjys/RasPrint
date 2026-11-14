@@ -341,7 +341,12 @@ h1 { font-size: clamp(24px, 2.65vw, 32px); font-weight: 820; line-height: 1.25; 
 .setting-check { display: flex; align-items: flex-start; gap: 8px; min-height: 30px; font-size: 13px; }
 .setting-check input { width: 16px; height: 16px; flex: 0 0 16px; margin: 2px 0 0; accent-color: var(--primary); }
 .settings-feedback:not(:empty) { margin-top: 10px; }
-.hotspot-address { display: inline-block; max-width: 100%; margin-top: 6px; color: var(--primary); font-size: 13px; overflow-wrap: anywhere; }
+.hotspot-hostname { display: flex; align-items: center; gap: 7px; }
+.hotspot-hostname > span { color: var(--muted); font-size: 13px; font-weight: 500; }
+.hotspot-addresses { display: grid; gap: 6px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+.hotspot-addresses > div { display: grid; gap: 1px; }
+.hotspot-address { color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.hotspot-address[href] { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
 .embedded-form { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .embedded-form h3 { margin-bottom: 10px; font-size: 14px; }
 .theme-colors-title { padding: 0; margin-bottom: 6px; font-size: 12px; font-weight: 650; }

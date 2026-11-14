@@ -24,6 +24,8 @@ sudo bash deploy/install.sh
 sudoedit /etc/rasprint/rasprint.env
 ```
 
+If you already installed RasPrint, rerun `sudo bash deploy/install.sh` from the updated source while the Pi has internet access. The updated web service and AP helper are installed together.
+
 ### 2. Add a CUPS printer
 
 Check that `lsusb` lists the printer. Use `sudo lpinfo -v` to discover printer connections and `lpstat -p -d` to inspect existing queues. RasPrint can use any compatible local CUPS queue. [CUPS administration](https://openprinting.github.io/cups/doc/admin.html)
@@ -103,7 +105,8 @@ sudo nmcli connection up id 'Previous Wi-Fi profile'
 Sign in from the **Admin** menu to change:
 
 - **Print settings.** Set a per-file upload limit of 1–100 MiB and choose a CUPS queue or allow users to choose from all configured queues.
-- **Wi-Fi and HTTP.** Set a network name, enable or disable WPA2, and set the Wi-Fi password. Enter a password when enabling WPA2 or renaming a protected network. The direct HTTP port can be any available port from 1 to 65535 except 80, which serves `rasprint.local`. Apply the changes, then reconnect using the Wi-Fi and URL shown in the confirmation. An open AP allows nearby users to join and submit print jobs.
+- **Wi-Fi and HTTP.** Set a network name, enable or disable WPA2, and set the Wi-Fi password. Enter a password when enabling WPA2 or renaming a protected Wi-Fi network. The direct HTTP port can be any available port from 1 to 65535 except 80, which serves the local web address. An open AP allows nearby users to join and submit print jobs.
+- **Local web address.** Enter a name such as `office-print` to use `http://office-print.local/` on the RasPrint Wi-Fi. Use 1–63 ASCII letters, digits, or hyphens. The first and last characters must be letters or digits. Changing just this name keeps the Wi-Fi connection up. Open the new address shown after saving and sign in again. The direct IP address and configured port also work. With Raspberry Pi OS's RAM-backed Overlay FS, the change lasts until reboot. [Overlay FS behavior](https://www.raspberrypi.com/documentation/computers/configuration.html#enable-or-disable-overlay-file-system)
 - **Admin password.** Enter the current password and a new password of 8–1024 UTF-8 bytes. Saving revokes every admin session. RasPrint stores a salted password hash in its state directory.
 
 Use `sudoedit /etc/rasprint/rasprint.env` and `sudo systemctl restart rasprint.service` to configure defaults. Saved print settings and the saved admin password take precedence over the environment. To recover the admin account from the Pi console, set a new value for `RASPRINT_ADMIN_PASSWORD` in the environment file, stop `rasprint.service`, remove `/var/lib/rasprint/admin-password`, and start the service again.
@@ -174,7 +177,7 @@ nmcli device status
 ```
 
 - `rasprint.socket` starts the web server on the first connection.
-- If the AP works but `rasprint.local` does not resolve, try the direct IP and configured port. Check the mDNS service and whether the client supports multicast DNS on that Wi-Fi network.
+- If the local web address does not resolve, use the direct IP and configured port. Check the mDNS service log and try a unique name if another device on the network already advertises it.
 - If the AP is missing, check the Wi-Fi country, `nmcli radio wifi`, and `nmcli -g WIFI-PROPERTIES.AP device show wlan0`.
 - If a queue remains stopped after you clear a jam or refill paper, inspect it with `lpstat -p` and use `sudo cupsenable hp8710` with the appropriate queue name.
 - RasPrint marks a job complete when CUPS reports completion. Some USB drivers report completion before the last sheet leaves the printer.

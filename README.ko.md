@@ -24,6 +24,8 @@ sudoedit /etc/rasprint/rasprint.env
 
 설치 스크립트가 CUPS와 Raspberry Pi OS용 `python3-cups`를 설치하고, `/opt/rasprint`에 시스템 패키지를 볼 수 있는 가상환경을 만듭니다. 시스템 서비스는 `rasprint` 계정으로 실행됩니다. 기본 관리자 비밀번호는 `rasprint`입니다. 사용을 시작하기 전에 설정 파일의 `RASPRINT_ADMIN_PASSWORD` 값을 바꿉니다. 설치를 다시 실행해도 설정 파일과 인쇄 서비스에 등록된 프린터는 유지됩니다.
 
+기존 설치를 업데이트하려면 Pi를 인터넷에 연결한 상태에서 최신 소스의 `sudo bash deploy/install.sh`를 실행하세요. 웹 서비스와 AP 설정 서비스가 함께 업데이트됩니다.
+
 ### 2. CUPS 프린터 연결
 
 ```bash
@@ -114,7 +116,9 @@ sudo nmcli connection up id '기존 Wi-Fi 프로필 이름'
 
 ## 관리자 설정
 
-관리자 메뉴에서 파일당 최대 업로드 크기(1~100 MiB)와 사용할 CUPS 대기열을 설정할 수 있습니다. AP 이름, WPA2 사용 여부, Wi-Fi 비밀번호와 직접 HTTP 포트도 바꿀 수 있습니다. 80번은 `rasprint.local`용으로 예약됩니다. WPA2를 켜거나 암호를 쓰는 AP의 이름을 바꿀 때는 비밀번호를 입력하세요. 적용 후 새 AP에 접속하고 화면에 안내된 URL을 엽니다.
+관리자 메뉴에서 파일당 최대 업로드 크기(1~100 MiB)와 사용할 CUPS 대기열을 설정할 수 있습니다. AP 이름, WPA2 사용 여부, Wi-Fi 비밀번호와 직접 HTTP 포트도 바꿀 수 있습니다. 80번은 `.local` 웹 주소에 사용됩니다. WPA2를 켜거나 암호를 쓰는 AP의 이름을 바꿀 때는 비밀번호를 입력하세요.
+
+**로컬 웹 주소**에 `office-print`를 입력하면 RasPrint Wi-Fi에서 `http://office-print.local/`로 접속할 수 있습니다. 영문, 숫자, 하이픈을 1~63자 쓸 수 있으며 첫 글자와 마지막 글자는 영문이나 숫자여야 합니다. 웹 주소만 바꾸면 Wi-Fi 연결이 유지됩니다. 화면에 안내된 새 주소를 열고 다시 로그인하세요. 기존 IP와 직접 포트로도 계속 접속할 수 있습니다. Raspberry Pi OS의 기본 Overlay FS를 켠 동안 바꾼 주소는 재부팅하면 이전 값으로 돌아갑니다. [Overlay FS 동작](https://www.raspberrypi.com/documentation/computers/configuration.html#enable-or-disable-overlay-file-system)
 
 관리자 비밀번호는 현재 비밀번호를 확인한 뒤 변경합니다. 변경하면 모든 관리자 세션이 만료됩니다. 초기 설정은 `sudoedit /etc/rasprint/rasprint.env`로 바꾼 뒤 `sudo systemctl restart rasprint.service`를 실행합니다. 웹에서 저장한 인쇄 설정과 관리자 비밀번호가 초기값에 우선합니다. 관리자 암호를 잊었다면 Pi 콘솔에서 환경 파일에 새 비밀번호를 설정하고, 서비스를 중지한 뒤 `/var/lib/rasprint/admin-password`를 삭제하고 서비스를 다시 시작하세요.
 
@@ -187,5 +191,6 @@ nmcli device status
 
 - 첫 웹 요청이 들어오면 `rasprint.socket`이 서버를 시작합니다. 요청 전에는 `rasprint.service`가 대기 상태일 수 있습니다.
 - AP가 보이지 않으면 Wi-Fi 국가 설정과 `nmcli radio wifi`, `nmcli -g WIFI-PROPERTIES.AP device show wlan0` 출력을 확인합니다.
+- `.local` 주소가 열리지 않으면 직접 IP와 포트로 접속하세요. 다른 기기가 이미 쓰는 이름이라면 관리자 메뉴에서 로컬 웹 주소를 다른 이름으로 바꿉니다.
 - 프린터에 용지를 보충하거나 걸림을 제거한 후에도 큐가 멈춰 있으면 `lpstat -p`로 원인을 확인하고 필요하면 `sudo cupsenable hp8710`로 다시 활성화합니다.
 - CUPS 완료 상태를 받으면 작업이 완료로 표시됩니다. USB 드라이버에 따라 이 상태는 마지막 종이가 배출되기 전에 보고될 수 있습니다.

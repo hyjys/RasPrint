@@ -20,7 +20,7 @@ from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException, MultiPartParser
 from starlette.requests import ClientDisconnect
 
-from .ap import AccessPoint, AccessPointError, DemoAccessPoint
+from .ap import AccessPoint, AccessPointError, DemoAccessPoint, configured_hostname
 from .auth import AdminAuth
 from .config import STATIC_DIR, Settings
 from .documents import SUPPORTED_EXTENSIONS
@@ -71,6 +71,7 @@ class APInput(BaseModel):
     secured: bool
     password: str | None = Field(None, max_length=63)
     port: int = Field(..., ge=1, le=65535)
+    hostname: str | None = None
 
 
 class PasswordChange(BaseModel):
@@ -176,6 +177,7 @@ def create_app(settings: Settings) -> FastAPI:
     cache_lock = Lock()
     dashboard_cache: dict[str, tuple[float, dict]] = {}
     allowed_hosts = {host.strip().lower() for host in os.getenv("RASPRINT_ALLOWED_HOSTS", "").split(",") if host.strip()}
+    dynamic_ap_host = os.getenv("RASPRINT_DYNAMIC_AP_HOST", "").lower() == "true"
 
     def invalidate_dashboard() -> None:
         with cache_lock:
@@ -184,7 +186,9 @@ def create_app(settings: Settings) -> FastAPI:
     @app.middleware("http")
     async def request_policy(request: Request, call_next):
         host = request.headers.get("host", "").partition(":")[0].lower().rstrip(".")
-        if allowed_hosts and host not in allowed_hosts:
+        if (allowed_hosts or dynamic_ap_host) and host not in allowed_hosts and not (
+            dynamic_ap_host and host.endswith(".local") and host == f"{configured_hostname()}.local"
+        ):
             response = Response(status_code=400)
         elif request.method in {"POST", "PUT", "DELETE", "PATCH"} and not same_origin(request):
             detail = translate(request, "같은 RasPrint 주소에서 요청하세요.", "Make the request from the same RasPrint address.")
@@ -422,7 +426,7 @@ def create_app(settings: Settings) -> FastAPI:
     async def save_ap_settings(request: Request):
         auth.require(request, csrf=True)
         data = await admin_input(request, APInput)
-        return await to_thread.run_sync(ap.apply, data.ssid, data.secured, data.password or "", data.port)
+        return await to_thread.run_sync(ap.apply, data.ssid, data.secured, data.password or "", data.port, data.hostname)
 
     def theme_response(locale: str):
         return {"themes": themes.available(locale), "active": themes.active(locale)["id"]}

@@ -1,7 +1,12 @@
+import json
 import logging
 import os
 import shutil
+from base64 import b64encode
+from hashlib import sha256
+from html import escape
 from pathlib import Path
+from string import Template
 from tempfile import TemporaryDirectory
 from threading import Lock
 from time import monotonic
@@ -11,7 +16,7 @@ from urllib.parse import urlsplit
 from anyio import CapacityLimiter, fail_after, to_thread
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 from python_multipart.exceptions import MultipartParseError
@@ -27,12 +32,14 @@ from .documents import SUPPORTED_EXTENSIONS
 from .i18n import ApiError, language, localized, translate
 from .printer import CupsPrinter, DemoPrinter, PrinterError
 from .state import PrintConfiguration, PrintSettings
-from .themes import LOGO_BYTES, THEME_BYTES, ThemeStore
+from .themes import DEFAULT_COLORS, LOGO_BYTES, THEME_BYTES, ThemeStore
 
 log = logging.getLogger(__name__)
 MIB = 1024 * 1024
 EXTENSIONS = sorted(extension.lower().lstrip(".") for extension in SUPPORTED_EXTENSIONS)
 BodyModel = TypeVar("BodyModel", bound=BaseModel)
+PAGE_TEMPLATE = Template((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+EDITOR_DEFAULT_COLORS = escape(json.dumps(DEFAULT_COLORS, separators=(",", ":")))
 
 
 class PrintOptions(BaseModel):
@@ -197,11 +204,13 @@ def create_app(settings: Settings) -> FastAPI:
             response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        style_hash = getattr(request.state, "theme_style_hash", None)
+        style_sources = f"'self' 'sha256-{style_hash}'" if style_hash else "'self'"
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; "
+            f"default-src 'self'; script-src 'self'; style-src {style_sources}; img-src 'self' blob:; "
             "base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'"
         )
-        if request.url.path.startswith("/api/") or request.url.path == "/":
+        if request.url.path.startswith("/api/") or request.url.path in {"/", "/static/index.html"}:
             response.headers["Cache-Control"] = "no-store"
         elif request.url.path.startswith("/static/") and request.url.path.endswith((".js", ".css")):
             response.headers["Cache-Control"] = "no-cache"
@@ -225,8 +234,21 @@ def create_app(settings: Settings) -> FastAPI:
         return JSONResponse({"detail": detail}, status_code=422)
 
     @app.get("/")
-    def index():
-        return FileResponse(STATIC_DIR / "index.html", media_type="text/html")
+    @app.get("/static/index.html", include_in_schema=False)
+    def index(request: Request):
+        active = themes.active(language(request))
+        colors = active["colors"]
+        # ThemeStore returns only known color keys and six-digit hex values.
+        declarations = "".join(f"--{key.replace('_', '-')}:{color};" for key, color in colors.items())
+        style = f":root{{{declarations}}}"
+        request.state.theme_style_hash = b64encode(sha256(style.encode("ascii")).digest()).decode("ascii")
+        html = PAGE_TEMPLATE.substitute(
+            brand_name=escape(active["brand"]["name"]),
+            brand_logo=escape(active["brand"]["logo"]),
+            theme_style=style,
+            editor_default_colors=EDITOR_DEFAULT_COLORS,
+        )
+        return HTMLResponse(html)
 
     @app.get("/api/info")
     def info():

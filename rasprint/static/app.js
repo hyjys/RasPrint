@@ -803,17 +803,15 @@ function colorProperty(key) {
   return `--${key.replaceAll('_', '-')}`;
 }
 
-const initialColors = {};
+const initialColors = JSON.parse(document.querySelector('meta[name="rasprint-theme-defaults"]').content);
 function createColorFields() {
   const target = element('theme-colors');
-  const pageStyle = getComputedStyle(document.documentElement);
   for (const key of themeKeys) {
     const label = node('label', 'theme-color');
     const control = node('input');
     const caption = node('span');
     control.type = 'color';
     control.name = `color_${key}`;
-    initialColors[key] = pageStyle.getPropertyValue(colorProperty(key)).trim();
     caption.dataset.i18n = themeColorLabels[key];
     label.append(control, caption);
     target.append(label);
@@ -1229,5 +1227,4 @@ resetThemeEditor();
 renderLanguage();
 showView(false);
 loadInfo().catch(() => {});
-loadTheme().catch(() => {});
 refreshDashboard();

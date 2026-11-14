@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RasPrint</title>
-  <link rel="icon" type="image/png" href="/static/logo.png" id="favicon">
+  <title>${brand_name}</title>
+  <link rel="icon" href="${brand_logo}" id="favicon">
   <link rel="stylesheet" href="/static/app.css">
+  <style>${theme_style}</style>
+  <meta name="rasprint-theme-defaults" content="${editor_default_colors}">
   <script src="/static/i18n.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
@@ -34,8 +36,8 @@
 
   <header class="mobile-header">
     <a class="brand" href="#dashboard">
-      <img class="brand-logo" src="/static/logo.png" width="34" height="34" alt="">
-      <span class="brand-name">RasPrint</span>
+      <img class="brand-logo" src="${brand_logo}" width="34" height="34" alt="">
+      <span class="brand-name">${brand_name}</span>
     </a>
     <button id="open-menu" class="icon-button" type="button" data-i18n-label="openMenu" aria-controls="sidebar" aria-expanded="false"><svg class="icon"><use href="#i-menu"/></svg></button>
   </header>
@@ -44,8 +46,8 @@
   <aside id="sidebar" class="sidebar" data-i18n-label="sidebar">
     <div class="sidebar-head">
       <a class="brand" href="#dashboard">
-        <img class="brand-logo" src="/static/logo.png" width="38" height="38" alt="">
-        <span class="brand-name">RasPrint</span>
+        <img class="brand-logo" src="${brand_logo}" width="38" height="38" alt="">
+        <span class="brand-name">${brand_name}</span>
       </a>
       <button id="close-menu" class="icon-button drawer-close" type="button" data-i18n-label="closeMenu"><svg class="icon"><use href="#i-close"/></svg></button>
     </div>

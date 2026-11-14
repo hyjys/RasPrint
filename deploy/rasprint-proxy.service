@@ -1,0 +1,27 @@
+[Unit]
+Description=RasPrint HTTP reverse proxy
+After=NetworkManager.service rasprint.socket
+Wants=NetworkManager.service rasprint.socket
+
+[Service]
+Type=exec
+User=rasprint-proxy
+Group=rasprint-proxy
+WorkingDirectory=/opt/rasprint
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m deploy.proxy
+Restart=on-failure
+RestartSec=3s
+StateDirectory=rasprint-proxy
+StateDirectoryMode=0700
+UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+{
+  "name": "플럼",
+  "name_en": "Plum",
+  "brand": {
+    "name": "RasPrint"
+  },
+  "colors": {
+    "primary": "#783E7B",
+    "primary_hover": "#5C275F",
+    "primary_light": "#F2E7F3",
+    "sidebar": "#FFFCFF",
+    "background": "#F7F3F8",
+    "panel": "#F4EFF5",
+    "border": "#E8DDE9",
+    "text": "#2F2131",
+    "muted": "#625264"
+  }
+}

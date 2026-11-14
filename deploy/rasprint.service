@@ -1,0 +1,29 @@
+[Unit]
+Description=RasPrint web server
+Requires=rasprint.socket
+Wants=cups.service
+After=cups.service
+PartOf=rasprint.socket
+
+[Service]
+Type=exec
+User=rasprint
+Group=rasprint
+WorkingDirectory=/opt/rasprint
+Environment=RASPRINT_STATE_DIR=/var/lib/rasprint
+Environment=RASPRINT_ALLOWED_HOSTS=rasprint.local,10.42.0.1
+Environment=CUPS_SERVER=/run/cups/cups.sock
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=/etc/rasprint/rasprint.env
+ExecStart=/opt/rasprint/.venv/bin/python -m uvicorn rasprint.main:app --fd 3 --workers 1 --proxy-headers --forwarded-allow-ips 10.42.0.1 --timeout-graceful-shutdown 20
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=30s
+StateDirectory=rasprint
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict

@@ -1,0 +1,28 @@
+[Unit]
+Description=RasPrint access point configuration service
+Requires=rasprint-ap.socket
+Wants=NetworkManager.service
+After=NetworkManager.service rasprint-ap.socket
+PartOf=rasprint-ap.socket
+
+[Service]
+Type=exec
+WorkingDirectory=/opt/rasprint
+Sockets=rasprint-ap.socket
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m deploy.ap_helper
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+StateDirectory=rasprint-ap
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+ReadWritePaths=/etc/NetworkManager/system-connections /etc/systemd/system/rasprint.socket.d
+
+[Install]
+WantedBy=multi-user.target

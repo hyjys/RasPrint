@@ -1,0 +1,7 @@
+.env
+.venv/
+.proxy-venv/
+.proxy-venv/
+.rasprint/
+__pycache__/
+*.py[cod]

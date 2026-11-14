@@ -1,0 +1,9 @@
+[Unit]
+Description=RasPrint AP web socket
+
+[Socket]
+ListenStream=10.42.0.1:8000
+FreeBind=yes
+
+[Install]
+WantedBy=sockets.target

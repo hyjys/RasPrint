@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RasPrint</title>
+  <link rel="icon" type="image/png" href="/static/logo.png" id="favicon">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/i18n.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6zM18 12h.01"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s7-3.5 7-9V5l-7-3-7 3v8c0 5.5 7 9 7 9z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2 9a16 16 0 0 1 20 0M5 13a11 11 0 0 1 14 0M8.5 17a5.5 5.5 0 0 1 7 0M12 21h.01"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5m11-.5a8 8 0 0 0-13.7-5.2L4 9m16 6-2.3 2.7A8 8 0 0 1 4 12.5"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5zM14 3v5h5M8 12h8m-8 4h5"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2c-2 4-6 7.5-6 12a6 6 0 1 0 12 0c0-4.5-4-8-6-12Z"/><path d="M9.5 15.5a2.5 2.5 0 0 0 2.5 2"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Zm0 6v4m0 4h.01"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3"/></symbol>
+    <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18h1.5a2 2 0 0 0 1.6-3.2 1.7 1.7 0 0 1 1.4-2.8H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><path d="M7.5 11h.01M10 7.5h.01M14 7.5h.01M17 11h.01"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#main" data-i18n="skip"></a>
+
+  <header class="mobile-header">
+    <a class="brand" href="#dashboard">
+      <img class="brand-logo" src="/static/logo.png" width="34" height="34" alt="">
+      <span class="brand-name">RasPrint</span>
+    </a>
+    <button id="open-menu" class="icon-button" type="button" data-i18n-label="openMenu" aria-controls="sidebar" aria-expanded="false"><svg class="icon"><use href="#i-menu"/></svg></button>
+  </header>
+
+  <div id="overlay" class="overlay" hidden></div>
+  <aside id="sidebar" class="sidebar" data-i18n-label="sidebar">
+    <div class="sidebar-head">
+      <a class="brand" href="#dashboard">
+        <img class="brand-logo" src="/static/logo.png" width="38" height="38" alt="">
+        <span class="brand-name">RasPrint</span>
+      </a>
+      <button id="close-menu" class="icon-button drawer-close" type="button" data-i18n-label="closeMenu"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <nav data-i18n-label="mainMenu" class="nav">
+      <div class="nav-section">
+        <p data-i18n="navPrint"></p>
+        <a class="nav-link" href="#dashboard" aria-current="page"><svg class="icon"><use href="#i-grid"/></svg><span data-i18n="dashboard"></span></a>
+        <a class="nav-link" href="#queue"><svg class="icon"><use href="#i-list"/></svg><span data-i18n="queue"></span><span id="nav-job-count" class="nav-count" hidden></span></a>
+      </div>
+      <div class="nav-section">
+        <p data-i18n="settings"></p>
+        <a class="nav-link" href="#admin"><svg class="icon"><use href="#i-shield"/></svg><span data-i18n="admin"></span></a>
+      </div>
+    </nav>
+    <div class="language-control">
+      <label for="language-select" data-i18n="language"></label>
+      <select id="language-select">
+        <option value="ko" lang="ko">한국어</option>
+        <option value="en" lang="en">English</option>
+        <option value="ja" lang="ja">日本語</option>
+        <option value="zh-CN" lang="zh-CN">简体中文</option>
+        <option value="es" lang="es">Español</option>
+        <option value="fr" lang="fr">Français</option>
+        <option value="de" lang="de">Deutsch</option>
+        <option value="ru" lang="ru">Русский</option>
+      </select>
+    </div>
+    <div class="sidebar-foot">
+      <span class="network-icon"><svg class="icon"><use href="#i-wifi"/></svg></span>
+      <div class="network-copy"><strong data-i18n="localPrint"></strong><span id="network-address"></span></div>
+    </div>
+  </aside>
+
+  <main id="main" tabindex="-1">
+    <div class="page">
+      <header class="page-header">
+        <div><h1 id="page-title" tabindex="-1"></h1><p id="page-subtitle"></p></div>
+        <div class="page-actions">
+          <span id="demo-indicator" class="badge tone-warning" data-i18n="demo" hidden></span>
+          <button id="refresh" class="button" type="button"><svg class="icon"><use href="#i-refresh"/></svg><span data-i18n="refresh"></span></button>
+        </div>
+      </header>
+
+      <div id="connection-error" class="notice tone-danger" role="alert" hidden></div>
+
+      <section id="dashboard" class="view" data-i18n-label="dashboard">
+        <div class="dashboard-grid">
+          <section class="card upload-card" aria-labelledby="upload-title">
+            <header class="card-header">
+              <span class="section-icon"><svg class="icon"><use href="#i-printer"/></svg></span>
+              <div><h2 id="upload-title" data-i18n="printDocument"></h2><p data-i18n="printDescription"></p></div>
+            </header>
+            <form id="upload-form" class="card-body" method="post" enctype="multipart/form-data" novalidate>
+              <fieldset class="form-fields" id="upload-fields">
+                <legend class="sr-only" data-i18n="printOptions"></legend>
+                <div id="dropzone" class="dropzone">
+                  <input id="document-file" name="file" class="sr-only file-input" type="file" aria-describedby="file-format">
+                  <label id="file-label" for="document-file" class="drop-label">
+                    <span class="drop-icon"><svg class="icon"><use id="drop-icon-use" href="#i-up"/></svg></span>
+                    <strong id="file-label-title"></strong>
+                    <span id="file-label-subtitle"></span>
+                  </label>
+                  <p id="file-format" class="file-format"></p>
+                  <button id="clear-file" class="icon-button clear-file" type="button" data-i18n-label="clearFile" hidden><svg class="icon"><use href="#i-close"/></svg></button>
+                </div>
+
+                <div class="form-grid">
+                  <label class="field printer-field"><span data-i18n="printer"></span><select id="printer-select" name="printer"><option value=""></option></select></label>
+                  <label class="field copies-field"><span data-i18n="copies"></span><input id="copies" name="copies" type="number" min="1" max="99" value="1" required></label>
+                  <label class="field"><span data-i18n="paperSize"></span><select name="media"><option value="" data-i18n="printerSetting"></option><option value="A4">A4</option><option value="Letter">Letter</option></select></label>
+                  <label class="field"><span data-i18n="sides"></span><select name="sides"><option value="" data-i18n="printerSetting"></option><option value="one-sided" data-i18n="oneSided"></option><option value="two-sided-long-edge" data-i18n="longEdge"></option><option value="two-sided-short-edge" data-i18n="shortEdge"></option></select></label>
+                  <label class="field full"><span data-i18n="color"></span><select name="print_color_mode"><option value="" data-i18n="printerSetting"></option><option value="color" data-i18n="colorPrint"></option><option value="monochrome" data-i18n="monochrome"></option></select></label>
+                </div>
+              </fieldset>
+              <div class="form-footer">
+                <button id="submit-print" class="button button-primary" type="submit" disabled><svg class="icon"><use href="#i-printer"/></svg><span></span></button>
+                <p id="upload-feedback" class="feedback" role="status"></p>
+              </div>
+            </form>
+          </section>
+
+          <div class="status-stack">
+            <section class="card" aria-labelledby="printer-title">
+              <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-printer"/></svg></span><div><h2 id="printer-title" data-i18n="printerStatus"></h2></div></header>
+              <div class="card-body status-body">
+                <div class="printer-heading">
+                  <strong id="printer-name"></strong>
+                  <span id="printer-state" class="badge tone-muted"></span>
+                </div>
+                <p id="printer-model" class="small muted" hidden></p>
+                <p id="printer-meta" class="small muted"></p>
+                <ul id="printer-reasons" class="reason-list" hidden></ul>
+                <p id="printer-message" class="small muted" hidden></p>
+              </div>
+            </section>
+
+            <section class="card" aria-labelledby="ink-title">
+              <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-drop"/></svg></span><div><h2 id="ink-title" data-i18n="inkLevels"></h2></div></header>
+              <div id="ink-levels" class="card-body ink-body"></div>
+            </section>
+          </div>
+        </div>
+
+        <section class="card queue-card" aria-labelledby="recent-title">
+          <header class="card-header spread">
+            <div class="heading-group"><span class="section-icon"><svg class="icon"><use href="#i-list"/></svg></span><div><h2 id="recent-title" data-i18n="recentJobs"></h2><p id="recent-count"></p></div></div>
+            <a class="button button-link" href="#queue"><span data-i18n="viewQueue"></span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+          </header>
+          <div id="recent-jobs"></div>
+        </section>
+      </section>
+
+      <section id="queue" class="view" data-i18n-label="queue" hidden>
+        <section class="card queue-card" aria-labelledby="queue-title">
+          <header class="card-header spread wrap">
+            <div class="heading-group"><span class="section-icon"><svg class="icon"><use href="#i-list"/></svg></span><div><h2 id="queue-title" data-i18n="printJobs"></h2><p id="queue-count"></p></div></div>
+            <div class="filters" id="job-filters" data-i18n-label="filterJobs" role="group"><button type="button" data-filter="all" aria-pressed="true" data-i18n="filterAll"></button><button type="button" data-filter="active" aria-pressed="false" data-i18n="filterActive"></button><button type="button" data-filter="finished" aria-pressed="false" data-i18n="filterFinished"></button></div>
+          </header>
+          <div id="all-jobs"></div>
+        </section>
+      </section>
+
+      <section id="admin" class="view" data-i18n-label="admin" hidden>
+        <section id="login-card" class="card login-card" aria-labelledby="login-title">
+          <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-lock"/></svg></span><div><h2 id="login-title" data-i18n="loginTitle"></h2><p data-i18n="loginDescription"></p></div></header>
+          <form id="login-form" class="card-body" method="post" novalidate>
+            <label class="field"><span data-i18n="password"></span><input type="password" name="password" autocomplete="current-password" maxlength="1024" required></label>
+            <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="login"></button><p id="login-feedback" class="feedback" role="status"></p></div>
+          </form>
+        </section>
+        <div id="admin-content" hidden>
+          <div class="admin-settings-grid">
+            <section class="card" aria-labelledby="server-settings-title">
+              <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-printer"/></svg></span><div><h2 id="server-settings-title" data-i18n="serverSettings"></h2><p data-i18n="serverSettingsDescription"></p></div></header>
+              <form id="server-settings-form" class="card-body" novalidate>
+                <fieldset class="form-fields admin-fields" disabled>
+                  <label class="field"><span id="cups-queue-label" data-i18n="cupsQueue"></span><select name="printer" aria-labelledby="cups-queue-label"><option value="" data-i18n="automaticQueue"></option></select></label>
+                  <p id="cups-settings-error" class="small muted" role="status" hidden></p>
+                  <label class="field"><span data-i18n="maxUpload"></span><input type="number" name="max_upload_mb" min="1" max="100" step="1" inputmode="numeric" required></label>
+                  <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="saveSettings"></button></div>
+                </fieldset>
+                <p id="server-settings-feedback" class="feedback settings-feedback" role="status"></p>
+              </form>
+            </section>
+
+            <section class="card" aria-labelledby="hotspot-title">
+              <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-wifi"/></svg></span><div><h2 id="hotspot-title" data-i18n="hotspotSettings"></h2><p data-i18n="hotspotDescription"></p></div></header>
+              <form id="hotspot-form" class="card-body" novalidate>
+                <fieldset class="form-fields admin-fields" disabled>
+                  <label class="field"><span data-i18n="ssid"></span><input name="ssid" maxlength="32" autocomplete="off" spellcheck="false" required></label>
+                  <label class="field"><span id="hotspot-port-label" data-i18n="webPort"></span><input name="port" type="number" min="1" max="65535" step="1" inputmode="numeric" aria-labelledby="hotspot-port-label" aria-describedby="hotspot-port-help" required><small id="hotspot-port-help" data-i18n="directPortHelp"></small></label>
+                  <label class="setting-check"><input name="secured" type="checkbox"> <span data-i18n="secured"></span></label>
+                  <label id="hotspot-password-field" class="field" hidden><span id="hotspot-password-label" data-i18n="apPassword"></span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="63" aria-labelledby="hotspot-password-label" aria-describedby="hotspot-password-help"><small id="hotspot-password-help" data-i18n="apPasswordHelp"></small></label>
+                  <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="applyHotspot"></button></div>
+                </fieldset>
+                <p id="hotspot-feedback" class="feedback settings-feedback" role="status"></p>
+                <a id="hotspot-address" class="hotspot-address" hidden></a>
+              </form>
+            </section>
+
+            <section class="card" aria-labelledby="theme-title">
+              <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-palette"/></svg></span><div><h2 id="theme-title" data-i18n="theme"></h2><p data-i18n="themeDescription"></p></div></header>
+              <div class="card-body">
+                <form id="theme-form">
+                  <label class="field"><span id="theme-select-label" data-i18n="chooseTheme"></span><select id="theme-select" name="theme" aria-labelledby="theme-select-label" required disabled><option value="" data-i18n="checkingThemes"></option></select></label>
+                  <div class="form-footer">
+                    <button id="apply-theme" class="button button-primary" type="submit" data-i18n="applyTheme" disabled></button>
+                    <button id="edit-theme" class="button" type="button" data-i18n="themeEdit" disabled></button>
+                    <button id="remove-theme" class="button button-danger" type="button" data-i18n="removeTheme" disabled></button>
+                  </div>
+                  <p id="theme-feedback" class="feedback settings-feedback" role="status"></p>
+                </form>
+                <form id="custom-theme-form" class="embedded-form" novalidate>
+                  <h3 data-i18n="themeEditor"></h3>
+                  <fieldset id="theme-editor-fields" class="form-fields admin-fields">
+                    <label class="field"><span id="theme-id-label" data-i18n="themeId"></span><input name="id" maxlength="48" pattern="[a-z0-9][a-z0-9_\-]{0,47}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-labelledby="theme-id-label" aria-describedby="theme-id-help" required><small id="theme-id-help" data-i18n="themeIdHelp"></small></label>
+                    <label class="field"><span data-i18n="themeName"></span><input name="theme_name" maxlength="48" required></label>
+                    <label class="field"><span data-i18n="themeNameEnglish"></span><input name="theme_name_en" maxlength="48"></label>
+                    <label class="field"><span data-i18n="themeBrand"></span><input name="brand_name" maxlength="48" required></label>
+                    <label class="field"><span data-i18n="themeUseJson"></span><input name="config" type="file" accept=".json,application/json"></label>
+                    <label class="field"><span data-i18n="themeLogo"></span><input name="logo" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                    <label id="theme-remove-logo-field" class="setting-check" hidden><input name="remove_logo" type="checkbox"> <span data-i18n="removeThemeLogo"></span></label>
+                    <div id="theme-preview" class="theme-preview" role="group" data-i18n-label="themePreview">
+                      <div class="theme-preview-brand"><img id="theme-preview-logo" src="/static/logo.png" alt="" width="29" height="29"> <strong id="theme-preview-name">RasPrint</strong></div>
+                      <div class="theme-preview-card">
+                        <strong data-i18n="themePreview"></strong>
+                        <span data-i18n="printDocument"></span>
+                        <div class="theme-preview-samples"><span class="sample-accent" data-i18n="print"></span><span class="sample-success" data-i18n="printerIdle"></span><span class="sample-warning" data-i18n="jobHeld"></span><span class="sample-danger" data-i18n="connectionError"></span></div>
+                      </div>
+                    </div>
+                    <fieldset class="form-fields">
+                      <legend class="theme-colors-title" data-i18n="themeColors"></legend>
+                      <div id="theme-colors" class="theme-colors"></div>
+                    </fieldset>
+                  </fieldset>
+                  <div class="form-footer">
+                    <button id="save-custom-theme" class="button button-primary" type="submit" data-i18n="addTheme"></button>
+                    <button id="reset-theme-editor" class="button" type="button" data-i18n="themeReset" hidden></button>
+                  </div>
+                  <p id="custom-theme-feedback" class="feedback settings-feedback" role="status"></p>
+                </form>
+              </div>
+            </section>
+
+            <section class="card" aria-labelledby="password-change-title">
+              <header class="card-header spread wrap"><div class="heading-group"><span class="section-icon"><svg class="icon"><use href="#i-lock"/></svg></span><div><h2 id="password-change-title" data-i18n="changePassword"></h2><p data-i18n="changePasswordDescription"></p></div></div><button id="logout" class="button" type="button" data-i18n="logout"></button></header>
+              <form id="password-change-form" class="card-body" method="post" novalidate>
+                <div class="admin-fields">
+                  <label class="field"><span data-i18n="currentPassword"></span><input name="current_password" type="password" autocomplete="current-password" maxlength="1024" required></label>
+                  <label class="field"><span id="new-password-label" data-i18n="newPassword"></span><input name="new_password" type="password" autocomplete="new-password" maxlength="1024" aria-labelledby="new-password-label" aria-describedby="new-password-help" required><small id="new-password-help" data-i18n="passwordLength"></small></label>
+                  <label class="field"><span data-i18n="confirmPassword"></span><input name="confirm_password" type="password" autocomplete="new-password" maxlength="1024" required></label>
+                </div>
+                <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="changePassword"></button></div>
+                <p id="password-change-feedback" class="feedback settings-feedback" role="status"></p>
+              </form>
+            </section>
+          </div>
+          <section class="card queue-card" aria-labelledby="manage-title">
+            <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-list"/></svg></span><div><h2 id="manage-title" data-i18n="manageJobs"></h2><p id="manage-count"></p></div></header>
+            <p id="manage-feedback" class="feedback manage-feedback" role="status" hidden></p>
+            <div id="manage-jobs"></div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <dialog id="cancel-dialog" class="confirm-dialog" aria-labelledby="cancel-title">
+    <h2 id="cancel-title" data-i18n="confirmCancel"></h2>
+    <p id="cancel-filename"></p>
+    <form method="dialog" class="dialog-actions">
+      <button class="button" value="close" data-i18n="close" autofocus></button>
+      <button class="button button-danger" value="cancel-job" data-i18n="cancelJob"></button>
+    </form>
+  </dialog>
+  <noscript>RasPrint를 사용하려면 브라우저에서 자바스크립트를 켜세요. <span lang="en">Enable JavaScript to use RasPrint.</span></noscript>
+</body>
+</html>

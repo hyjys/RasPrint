@@ -1,0 +1,12 @@
+[Unit]
+Description=RasPrint access point configuration socket
+
+[Socket]
+ListenStream=/run/rasprint-ap.sock
+SocketUser=root
+SocketGroup=rasprint
+SocketMode=0660
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

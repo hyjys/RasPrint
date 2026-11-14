@@ -429,7 +429,8 @@ def create_app(settings: Settings) -> FastAPI:
         return await to_thread.run_sync(ap.apply, data.ssid, data.secured, data.password or "", data.port, data.hostname)
 
     def theme_response(locale: str):
-        return {"themes": themes.available(locale), "active": themes.active(locale)["id"]}
+        active_theme = themes.active(locale)
+        return {"themes": themes.available(locale), "active": active_theme["id"], "active_theme": active_theme}
 
     @app.get("/api/admin/themes")
     def list_themes(request: Request):

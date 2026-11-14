@@ -76,6 +76,7 @@ let hotspotChange = null;
 let hotspotTimer = 0;
 let installedThemes = [];
 let themeBusy = false;
+let themeRevision = 0;
 let themeDraft = {};
 let themeEditId = null;
 let themePreviewLogo = '/static/logo.png';
@@ -579,8 +580,7 @@ function renderInfo() {
   fileInput.accept = extensions.map((extension) => `.${extension}`).join(',');
 }
 
-async function loadTheme() {
-  const theme = await request('/api/theme');
+function renderTheme(theme) {
   const brand = theme.brand?.name || 'RasPrint';
   const logo = theme.brand?.logo || '/static/logo.png';
   document.title = brand;
@@ -592,6 +592,12 @@ async function loadTheme() {
     if (hex.test(theme.colors?.[key])) document.documentElement.style.setProperty(property, theme.colors[key]);
     else document.documentElement.style.removeProperty(property);
   }
+}
+
+async function loadTheme() {
+  const revision = themeRevision;
+  const theme = await request('/api/theme');
+  if (revision === themeRevision) renderTheme(theme);
 }
 
 function showSession(nextSession) {
@@ -631,16 +637,27 @@ function updateThemeButtons() {
   text(save.id, t(themeEditId ? 'themeSave' : 'addTheme'));
 }
 
-function renderAdminThemes(result) {
+function renderAdminThemes(result, selected = result.active) {
   installedThemes = result.themes;
-  selectOptions(themeSelect, result.themes.map((theme) => [theme.id, theme.name]), result.active);
+  selectOptions(themeSelect, result.themes.map((theme) => [theme.id, theme.name]), selected);
   updateThemeButtons();
 }
 
-async function loadAdminThemes() {
+async function loadAdminThemes(selected) {
+  const revision = themeRevision;
   const requestedLanguage = language;
   const result = await request('/api/admin/themes', { admin: true });
-  if (requestedLanguage === language && session.authenticated) renderAdminThemes(result);
+  if (revision === themeRevision && requestedLanguage === language && session.authenticated) {
+    renderAdminThemes(result, selected);
+  }
+}
+
+function acceptThemeChange(result, requestedLanguage, selected = result.active) {
+  themeRevision++;
+  renderTheme(result.active_theme);
+  if (!session.authenticated) return;
+  if (requestedLanguage === language) renderAdminThemes(result, selected);
+  else loadAdminThemes(selected).catch((error) => adminError('theme-feedback', error));
 }
 
 async function loadAdmin() {
@@ -765,8 +782,14 @@ async function saveTheme(event) {
   updateThemeButtons();
   feedback('theme-feedback');
   try {
-    await request('/api/admin/theme', { method: 'PUT', body: { id: themeSelect.value }, admin: true });
-    await loadTheme();
+    const requestedLanguage = language;
+    const theme = await request('/api/admin/theme', { method: 'PUT', body: { id: themeSelect.value }, admin: true });
+    themeRevision++;
+    renderTheme(theme);
+    if (session.authenticated) {
+      themeSelect.value = theme.id;
+      if (requestedLanguage !== language) loadAdminThemes(theme.id).catch((error) => adminError('theme-feedback', error));
+    }
     feedback('theme-feedback', t('themeApplied'), 'success');
   } catch (error) {
     adminError('theme-feedback', error);
@@ -926,10 +949,10 @@ async function addTheme(event) {
     const logo = controls.logo.files[0];
     if (logo) body.set('logo', logo);
     const path = editing ? `/api/admin/themes/${encodeURIComponent(themeEditId)}` : '/api/admin/themes';
-    await request(path, { method: editing ? 'PUT' : 'POST', body, admin: true });
-    await Promise.all([loadAdminThemes(), loadTheme()]);
+    const requestedLanguage = language;
+    const result = await request(path, { method: editing ? 'PUT' : 'POST', body, admin: true });
+    acceptThemeChange(result, requestedLanguage, id);
     resetThemeEditor();
-    themeSelect.value = id;
     feedback('custom-theme-feedback', t(editing ? 'themeSaved' : 'themeAdded'), 'success');
   } catch (error) {
     adminError('custom-theme-feedback', error);
@@ -946,8 +969,9 @@ async function removeTheme() {
   feedback('theme-feedback');
   try {
     const id = themeSelect.value;
-    await request(`/api/admin/themes/${encodeURIComponent(id)}`, { method: 'DELETE', admin: true });
-    await Promise.all([loadAdminThemes(), loadTheme()]);
+    const requestedLanguage = language;
+    const result = await request(`/api/admin/themes/${encodeURIComponent(id)}`, { method: 'DELETE', admin: true });
+    acceptThemeChange(result, requestedLanguage);
     if (id === themeEditId) resetThemeEditor();
     feedback('theme-feedback', t('themeRemoved'), 'success');
   } catch (error) {

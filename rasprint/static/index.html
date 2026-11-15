@@ -111,6 +111,7 @@
                     <span id="file-label-subtitle"></span>
                   </label>
                   <p id="file-format" class="file-format"></p>
+                  <p id="office-format-help" class="file-format" data-i18n="officeUnavailable" hidden></p>
                   <button id="clear-file" class="icon-button clear-file" type="button" data-i18n-label="clearFile" hidden><svg class="icon"><use href="#i-close"/></svg></button>
                 </div>
 
@@ -120,6 +121,12 @@
                   <label class="field"><span data-i18n="paperSize"></span><select name="media"><option value="" data-i18n="printerSetting"></option><option value="A4">A4</option><option value="Letter">Letter</option></select></label>
                   <label class="field"><span data-i18n="sides"></span><select name="sides"><option value="" data-i18n="printerSetting"></option><option value="one-sided" data-i18n="oneSided"></option><option value="two-sided-long-edge" data-i18n="longEdge"></option><option value="two-sided-short-edge" data-i18n="shortEdge"></option></select></label>
                   <label class="field full"><span data-i18n="color"></span><select name="print_color_mode"><option value="" data-i18n="printerSetting"></option><option value="color" data-i18n="colorPrint"></option><option value="monochrome" data-i18n="monochrome"></option></select></label>
+                  <label id="page-range-field" class="field full" hidden>
+                    <span id="page-range-label" data-i18n="pageRanges"></span>
+                    <input id="page-ranges" name="page_ranges" type="text" maxlength="1024" placeholder="1,3-5,8" autocomplete="off" spellcheck="false" aria-labelledby="page-range-label" aria-describedby="page-range-help" disabled>
+                    <small id="page-range-help" class="muted" data-i18n="pageRangesHelp"></small>
+                    <small id="office-page-range-help" class="muted" data-i18n="officePageRangesHelp" hidden></small>
+                  </label>
                 </div>
               </fieldset>
               <div class="form-footer">
@@ -153,7 +160,7 @@
         </div>
 
         <section class="card queue-card" aria-labelledby="recent-title">
-          <header class="card-header spread">
+          <header class="card-header spread wrap">
             <div class="heading-group"><span class="section-icon"><svg class="icon"><use href="#i-list"/></svg></span><div><h2 id="recent-title" data-i18n="recentJobs"></h2><p id="recent-count"></p></div></div>
             <a class="button button-link" href="#queue"><span data-i18n="viewQueue"></span><svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
           </header>

@@ -4,7 +4,7 @@
 
 RasPrint는 Raspberry Pi Zero W에 USB 프린터를 연결해 브라우저에서 인쇄하는 FastAPI 서버입니다. 휴대폰이나 PC를 Pi의 Wi-Fi에 연결하면 문서를 보내고 인쇄 대기열과 프린터 상태를 확인할 수 있습니다.
 
-- 인쇄 형식은 PDF, JPEG, PNG, UTF-8 TXT입니다. 한글 문서나 레이아웃을 유지해야 하는 문서는 글꼴을 포함한 PDF로 저장해 올리세요.
+- PDF, Word, PowerPoint, Excel, JPEG, PNG, UTF-8 TXT를 인쇄할 수 있습니다. PDF와 Office 문서는 인쇄할 페이지를 지정할 수 있습니다.
 - 진행률, 잉크 잔량, 용지 부족과 걸림은 프린터 및 CUPS 드라이버가 보고하는 값을 표시합니다. 장치에서 값을 제공하지 않는 항목은 확인할 수 없음으로 표시합니다.
 - 관리자 메뉴는 비밀번호로 보호됩니다. AP에 접속한 사용자는 파일을 인쇄하고 작업 이름과 상태를 볼 수 있으므로 Wi-Fi 비밀번호는 사용할 사람에게만 공유하세요.
 - 영어, 한국어, 일본어, 중국어(간체), 스페인어, 프랑스어, 독일어, 러시아어를 지원합니다. 왼쪽 메뉴에서 표시 언어를 바꿀 수 있습니다.
@@ -27,6 +27,8 @@ sudoedit /etc/rasprint/rasprint.env
 기존 설치를 업데이트하려면 Pi를 인터넷에 연결한 상태에서 최신 소스의 `sudo bash deploy/install.sh`를 실행하세요. 웹 서비스와 AP 설정 서비스가 함께 업데이트됩니다.
 
 Pi가 자체 AP로 동작 중이면 PC에서 최신 소스를 복사한 뒤 `sudo bash deploy/install.sh --offline`로 업데이트할 수 있습니다. 기존 Python 환경을 사용합니다. 프린터 드라이버나 `overlayroot`가 빠져 있다면 Pi가 인터넷에 연결된 상태에서 설치해야 합니다. Overlay FS가 켜져 있다면 업데이트를 유지하려면 먼저 끄고 재부팅하세요.
+
+기존 설치에 Office 변환과 페이지 선택을 추가하려면 인터넷에 연결된 상태에서 설치 스크립트를 한 번 실행해 Python 패키지와 `qpdf`를 설치하세요.
 
 ### 2. CUPS 프린터 연결
 
@@ -119,6 +121,18 @@ sudo nmcli connection modify id RasPrint-AP connection.autoconnect no
 sudo nmcli connection down id RasPrint-AP
 sudo nmcli connection up id '기존 Wi-Fi 프로필 이름'
 ```
+
+## Office 문서와 특정 페이지 인쇄
+
+RasPrint가 변환기를 자동으로 선택합니다. LibreOffice의 Writer, Calc, Impress가 설치되어 있으면 `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, `.xlsx`를 변환할 때 LibreOffice를 사용합니다. 기본 설치에 포함된 Python 변환기는 LibreOffice가 없을 때 python-docx, python-pptx, openpyxl, ReportLab으로 `.docx`, `.pptx`, `.xlsx`를 처리합니다. Python 모드에서는 문서 배치나 페이지 나눔이 원본과 다를 수 있으며, Excel 수식은 파일에 저장된 계산 결과를 사용합니다. 원본 배치를 그대로 인쇄하려면 PDF로 내보낸 뒤 올리세요.
+
+LibreOffice를 사용하려면 인터넷에 연결된 Pi에서 다음을 실행하세요.
+
+```bash
+sudo apt install --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress
+```
+
+문서를 고른 다음 **인쇄할 페이지**에 `1,3-5,8`처럼 입력합니다. Office 문서의 페이지 번호는 변환된 PDF 기준이고, PowerPoint는 변환된 슬라이드 한 장이 한 페이지입니다. 비워 두면 전체를 인쇄합니다. CUPS가 현재 페이지 번호만 알려줄 때는 PDF와 Office 문서의 인쇄 페이지 수와 매수를 바탕으로 진행률을 추정해 표시합니다.
 
 ## 관리자 설정
 

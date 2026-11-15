@@ -9,7 +9,7 @@ from pathlib import Path
 from string import Template
 from tempfile import TemporaryDirectory
 from threading import Lock
-from time import monotonic
+from time import monotonic, time
 from typing import Literal, TypeVar
 from urllib.parse import urlsplit
 
@@ -29,16 +29,18 @@ from .ap import AccessPoint, AccessPointError, DemoAccessPoint, configured_hostn
 from .auth import AdminAuth
 from .config import STATIC_DIR, Settings
 from .cups_setup import CupsSetup, CupsSetupError, DemoCupsSetup
-from .documents import SUPPORTED_EXTENSIONS
+from .documents import OFFICE_EXTENSIONS, SUPPORTED_EXTENSIONS
 from .i18n import ApiError, language, localized, translate
+from .office import office_engine, office_extensions, prepare_print_document
 from .overlay import DemoOverlaySetup, OverlaySetup, OverlaySetupError
+from .pages import page_ranges_supported, parse_page_ranges, prepare_pdf_pages
 from .printer import CupsPrinter, DemoPrinter, PrinterError
-from .state import PrintConfiguration, PrintSettings
+from .state import PrintConfiguration, PrintJobPages, PrintSettings
 from .themes import DEFAULT_COLORS, LOGO_BYTES, THEME_BYTES, ThemeStore
 
 log = logging.getLogger(__name__)
 MIB = 1024 * 1024
-EXTENSIONS = sorted(extension.lower().lstrip(".") for extension in SUPPORTED_EXTENSIONS)
+PAGE_EXTENSIONS = OFFICE_EXTENSIONS | {".pdf"}
 BodyModel = TypeVar("BodyModel", bound=BaseModel)
 PAGE_TEMPLATE = Template((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 EDITOR_DEFAULT_COLORS = escape(json.dumps(DEFAULT_COLORS, separators=(",", ":")))
@@ -50,6 +52,7 @@ class PrintOptions(BaseModel):
     media: Literal["A4", "Letter"] | None = None
     sides: Literal["one-sided", "two-sided-long-edge", "two-sided-short-edge"] | None = None
     print_color_mode: Literal["auto", "color", "monochrome"] = "auto"
+    page_ranges: str = Field("", max_length=1024)
 
     def cups(self) -> dict[str, str]:
         values = {"copies": str(self.copies)}
@@ -197,6 +200,7 @@ def create_app(settings: Settings) -> FastAPI:
     auth = AdminAuth(settings.admin_password, settings.secure_cookie, settings.state_dir)
     ap = DemoAccessPoint() if settings.demo else AccessPoint()
     printing = PrintSettings(settings.state_dir, PrintConfiguration(settings.max_upload_mb, settings.printer))
+    job_pages = PrintJobPages(None if settings.demo else settings.state_dir)
     themes = ThemeStore(settings.themes_dir, settings.state_dir, settings.theme)
     uploads = CapacityLimiter(2)
     password_workers = CapacityLimiter(2)
@@ -275,7 +279,16 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.get("/api/info")
     def info():
-        return {"max_upload_mb": printing.get().max_upload_mb, "allowed_extensions": EXTENSIONS}
+        engine = office_engine()
+        extensions = SUPPORTED_EXTENSIONS | office_extensions(engine)
+        scoped = extensions & PAGE_EXTENSIONS if page_ranges_supported() else set()
+        return {
+            "max_upload_mb": printing.get().max_upload_mb,
+            "allowed_extensions": sorted(extension[1:] for extension in extensions),
+            "page_range_extensions": sorted(extension[1:] for extension in scoped),
+            "office_available": engine is not None,
+            "office_engine": engine,
+        }
 
     @app.get("/api/theme")
     def theme(request: Request):
@@ -309,7 +322,7 @@ def create_app(settings: Settings) -> FastAPI:
                 return cached[1]
             error = None
             try:
-                snapshot = backend.snapshot(language=locale)
+                snapshot = backend.snapshot(language=locale, document_progress=job_pages.snapshot)
             except PrinterError as exc:
                 snapshot = {"printers": [], "default_printer": None, "jobs": []}
                 error = localized(locale, str(exc), exc.english)
@@ -336,6 +349,14 @@ def create_app(settings: Settings) -> FastAPI:
         config = printing.get()
         if source.size is not None and source.size > config.max_upload_mb * MIB:
             raise upload_limit_error(config.max_upload_mb)
+        page_spec = options.page_ranges.strip()
+        if page_spec and extension not in PAGE_EXTENSIONS:
+            raise ApiError(422, "PDF, Word, PowerPoint, Excel 문서에서만 페이지를 선택할 수 있습니다.",
+                           "Page selection is available for PDF, Word, PowerPoint, and Excel.")
+        ranges = parse_page_ranges(page_spec) if page_spec else []
+        if ranges and not page_ranges_supported():
+            raise ApiError(503, "페이지 선택을 사용하려면 서버에 qpdf를 설치하세요.",
+                           "Install qpdf on the server to select pages.")
         queues, default = backend.queues()
         if config.printer and options.printer and options.printer != config.printer:
             raise ApiError(400, "사용할 수 없는 프린터입니다.", "This printer is unavailable.")
@@ -349,10 +370,20 @@ def create_app(settings: Settings) -> FastAPI:
         if target not in queues:
             raise ApiError(404, "프린터를 찾을 수 없습니다.", "Printer not found.")
         with TemporaryDirectory(prefix="rasprint-") as directory:
-            path = Path(directory) / f"document.{extension}"
+            path = Path(directory) / f"document{extension}"
             with path.open("wb") as output:
                 shutil.copyfileobj(source.file, output, length=128 * 1024)
-            return backend.submit(target, path, title[:160], options.cups())
+            path = prepare_print_document(path)
+            pages = None
+            if path.suffix.lower() == ".pdf":
+                path, pages = prepare_pdf_pages(path, ranges)
+            created_at = int(time())
+            job_id = backend.submit(target, path, title[:160], options.cups())
+            try:
+                job_pages.record(job_id, pages=pages, copies=options.copies, printer=target, created_at=created_at)
+            except OSError:
+                log.exception("Could not persist print job page counts")
+            return job_id
 
     @app.post("/api/jobs", status_code=201)
     async def print_job(request: Request):
@@ -368,8 +399,8 @@ def create_app(settings: Settings) -> FastAPI:
                 if file.size > max_file:
                     raise too_big
                 title = document_title(file.filename)
-                extension = Path(title).suffix.lower().lstrip(".")
-                if extension not in EXTENSIONS:
+                extension = Path(title).suffix.lower()
+                if extension not in SUPPORTED_EXTENSIONS | OFFICE_EXTENSIONS:
                     raise ApiError(415, "지원하지 않는 파일 형식입니다.", "This file type is unsupported.")
                 try:
                     options = PrintOptions(**{key: value for key, value in form.items() if key != "file"})

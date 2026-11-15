@@ -5,6 +5,7 @@ const printerSelect = element('printer-select');
 const fileInput = element('document-file');
 const printForm = element('upload-form');
 const printButton = element('submit-print');
+const pageRangeInput = element('page-ranges');
 const adminForm = element('login-form');
 const themeForm = element('theme-form');
 const themeSelect = element('theme-select');
@@ -76,6 +77,7 @@ let activeFilter = 'all';
 let cancelTarget = null;
 let maxUpload = 25;
 let extensions = ['pdf', 'jpg', 'jpeg', 'png', 'txt'];
+let pageRangeExtensions = [];
 let adminSettings = null;
 let printerDiscovery = null;
 let printerSetupAction = '';
@@ -296,6 +298,10 @@ function renderPageHeading() {
 }
 
 function setFile(nextFile, error = '') {
+  if (file !== nextFile) {
+    pageRangeInput.value = '';
+    pageRangeInput.removeAttribute('aria-invalid');
+  }
   file = nextFile;
   if (!file) fileInput.value = '';
   renderFile();
@@ -311,13 +317,30 @@ function renderFile() {
   text('file-label-subtitle', file ? t('changeFile', { size: (file.size / (1024 * 1024)).toFixed(2) }) : t('dropFile'));
   element('drop-icon-use').setAttribute('href', file ? '#i-file' : '#i-up');
   element('clear-file').hidden = !file;
+  renderPageRanges();
+}
+
+function fileExtension(documentFile) {
+  const dot = documentFile.name.lastIndexOf('.');
+  return dot >= 0 ? documentFile.name.slice(dot + 1).toLowerCase() : '';
+}
+
+function renderPageRanges() {
+  const extension = file ? fileExtension(file) : '';
+  const supported = pageRangeExtensions.includes(extension);
+  element('page-range-field').hidden = !supported;
+  pageRangeInput.disabled = !supported;
+  const office = supported && extension !== 'pdf';
+  element('office-page-range-help').hidden = !office;
+  pageRangeInput.setAttribute('aria-describedby', office ? 'page-range-help office-page-range-help' : 'page-range-help');
 }
 
 function chooseFile(nextFile) {
   if (!nextFile) return;
-  const suffix = nextFile.name.split('.').pop().toLowerCase();
-  if (!nextFile.name.includes('.') || !extensions.includes(suffix)) {
-    setFile(null, t('invalidFileType'));
+  const extension = fileExtension(nextFile);
+  if (!extensions.includes(extension)) {
+    const key = ['doc', 'ppt', 'xls'].includes(extension) ? 'legacyOfficeFileType' : 'invalidFileType';
+    setFile(null, t(key));
   } else if (!nextFile.size || nextFile.size > maxUpload * 1024 * 1024) {
     setFile(null, t('invalidFileSize', { size: maxUpload }));
   } else {
@@ -341,8 +364,20 @@ async function printDocument(event) {
     element('copies').focus();
     return;
   }
+  const pageRanges = pageRangeInput.disabled ? '' : pageRangeInput.value.trim();
+  if (pageRanges && !pageRanges.split(',').every((part) => {
+    const range = /^([0-9]{1,9})(?:\s*[-–]\s*([0-9]{1,9}))?$/.exec(part.trim());
+    return range && Number(range[1]) > 0 && (!range[2] || Number(range[1]) <= Number(range[2]));
+  })) {
+    pageRangeInput.setAttribute('aria-invalid', 'true');
+    feedback('upload-feedback', t('invalidPageRanges'), 'error');
+    pageRangeInput.focus();
+    return;
+  }
   const form = new FormData(printForm);
   form.set('file', file, file.name);
+  if (pageRanges) form.set('page_ranges', pageRanges);
+  else form.delete('page_ranges');
   for (const key of ['printer', 'media', 'sides', 'print_color_mode']) {
     if (!form.get(key)) form.delete(key);
   }
@@ -454,7 +489,11 @@ function jobRow(job, manage) {
   const progress = percentage(job.progress);
   if (progress !== null) {
     const progressGroup = node('div', 'job-progress');
-    progressGroup.append(meter(progress, t('progressFor', { title })), node('span', '', `${progress}%`));
+    const estimated = job.progress_estimated === true;
+    const label = t(estimated ? 'estimatedProgressFor' : 'progressFor', { title });
+    const value = node('span', '', estimated ? `≈${progress}%` : `${progress}%`);
+    if (estimated) value.title = t('estimatedProgress');
+    progressGroup.append(meter(progress, label), value);
     progressCell.append(progressGroup);
   } else {
     progressCell.append(node('span', 'muted', t('unavailable')));
@@ -582,6 +621,11 @@ async function loadInfo() {
     const info = await request('/api/info');
     if (Number.isFinite(info.max_upload_mb) && info.max_upload_mb > 0) maxUpload = info.max_upload_mb;
     if (info.allowed_extensions?.length) extensions = info.allowed_extensions.map((extension) => extension.replace(/^\./, '').toLowerCase());
+    element('office-format-help').hidden = info.office_available !== false;
+    if (Array.isArray(info.page_range_extensions)) {
+      pageRangeExtensions = info.page_range_extensions;
+      renderPageRanges();
+    }
   } finally {
     renderInfo();
   }
@@ -1414,6 +1458,7 @@ element('job-filters').addEventListener('click', (event) => {
   renderJobs();
 });
 fileInput.addEventListener('change', () => chooseFile(fileInput.files[0]));
+pageRangeInput.addEventListener('input', () => pageRangeInput.removeAttribute('aria-invalid'));
 element('clear-file').addEventListener('click', () => {
   setFile(null);
   fileInput.focus();

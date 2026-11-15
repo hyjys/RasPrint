@@ -17,6 +17,7 @@ _FORMATS = {
     ".txt": ("text/plain", b""),
 }
 SUPPORTED_EXTENSIONS = frozenset(_FORMATS)
+OFFICE_EXTENSIONS = frozenset({".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"})
 _BINARY_CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0e-\x1f\x7f]")
 
 

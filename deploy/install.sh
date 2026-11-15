@@ -38,12 +38,21 @@ if [[ $offline == yes ]]; then
         echo 'Offline updates require an existing RasPrint installation and working Python environments.' >&2
         exit 1
     fi
+    if ! command -v qpdf >/dev/null; then
+        echo 'Page selection will be unavailable until qpdf is installed. Rerun the installer with internet access.' >&2
+    fi
+    if ! "$app_python" -B -c 'import defusedxml, docx, openpyxl, pptx, reportlab' 2>/dev/null; then
+        echo 'Python Office conversion dependencies are missing. Rerun the installer with internet access to add them.' >&2
+    fi
 else
     apt-get update
     apt-get install -y --no-install-recommends \
         cups cups-filters cups-ipp-utils python3-cups python3-venv printer-driver-hpcups \
         network-manager wpasupplicant dnsmasq-base nftables rsync usbutils \
         mitmproxy avahi-daemon python3-dbus
+    # Prefer Raspberry Pi OS builds of the dependencies with native extensions.
+    apt-get install -y --no-install-recommends \
+        qpdf python3-lxml python3-pil python3-xlsxwriter fonts-nanum fonts-dejavu-core
     if command -v raspi-config >/dev/null || apt-cache show raspi-config >/dev/null 2>&1; then
         apt-get install -y --no-install-recommends raspi-config overlayroot
     fi

@@ -4,7 +4,7 @@
 
 RasPrint is a FastAPI server for printing to a USB printer attached to a Raspberry Pi Zero W. Connect a phone or computer to the Pi's Wi-Fi network, then upload a file from your browser. The interface and its fonts are served locally and work without internet access.
 
-- Upload PDF, JPEG, PNG, or UTF-8 TXT files. Use a PDF with embedded fonts to preserve the original layout.
+- Upload PDF, Word, PowerPoint, Excel, JPEG, PNG, or UTF-8 TXT files. Select individual pages or page ranges for PDF and Office documents.
 - View queued jobs, print progress, ink levels, and printer errors such as paper jams or an empty tray. The available readings depend on the printer and its CUPS driver.
 - The admin menu lets you register USB printers and change the access point, HTTP port, upload limit, CUPS queue, admin password, and themes. Anyone joined to the Wi-Fi network can submit jobs and see their names and status.
 - The interface supports English, Korean, Japanese, Simplified Chinese, Spanish, French, German, and Russian. Choose a language in the sidebar.
@@ -27,6 +27,8 @@ sudoedit /etc/rasprint/rasprint.env
 If you already installed RasPrint, rerun `sudo bash deploy/install.sh` from the updated source while the Pi has internet access. The updated web service and AP helper are installed together.
 
 For a Pi already running RasPrint on its own Wi-Fi, transfer the updated source from a computer and run `sudo bash deploy/install.sh --offline`. This reuses the existing Python environments. A missing CUPS driver or `overlayroot` still needs to be installed while the Pi has internet access. If Overlay FS is active, disable it and reboot before installing a permanent update.
+
+To add Office conversion and page selection to an older installation, run the installer with internet access once so it can install the Python packages and `qpdf` that those features use.
 
 ### 2. Add a CUPS printer
 
@@ -103,6 +105,18 @@ sudo nmcli connection modify id RasPrint-AP connection.autoconnect no
 sudo nmcli connection down id RasPrint-AP
 sudo nmcli connection up id 'Previous Wi-Fi profile'
 ```
+
+## Print Office documents and selected pages
+
+RasPrint detects the converter automatically. If LibreOffice with Writer, Calc, and Impress is installed, RasPrint uses it for `.doc`, `.docx`, `.ppt`, `.pptx`, `.xls`, and `.xlsx`. The standard installation includes a Python converter for `.docx`, `.pptx`, and `.xlsx` using python-docx, python-pptx, openpyxl, and ReportLab. The Python renderer's page breaks and layout can differ from the original. It uses the cached results of Excel formulas. For exact layout, export the document to PDF before uploading.
+
+To add LibreOffice on the Pi when it has internet access, run:
+
+```bash
+sudo apt install --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress
+```
+
+Select a document, then enter pages such as `1,3-5,8` in **Pages to print**. Office page numbers follow the converted PDF. For PowerPoint, each rendered slide is one page. Leave the field empty to print everything. When CUPS only reports a current page, RasPrint displays an estimated percentage for PDFs and converted Office documents based on the submitted page count and number of copies.
 
 ## Admin settings
 

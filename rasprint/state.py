@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import Lock
+from typing import TypedDict
 
 
 def atomic_write(path: Path, content: bytes) -> None:
@@ -51,3 +52,45 @@ class PrintSettings:
             payload = {"max_upload_mb": config.max_upload_mb, "printer": config.printer}
             atomic_write(self.path, json.dumps(payload).encode("utf-8"))
             self.current = config
+
+
+class JobPages(TypedDict):
+    pages: int
+    copies: int
+    printer: str
+    created_at: int
+
+
+class PrintJobPages:
+    limit = 512
+
+    def __init__(self, state_dir: Path | None):
+        self.path = state_dir / "job-pages.json" if state_dir else None
+        self.lock = Lock()
+        self.jobs: dict[int, JobPages] = {}
+        if self.path:
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+                for key, value in list(data.items())[-self.limit:]:
+                    if key.isascii() and key.isdecimal() and isinstance(value, dict):
+                        self.jobs[int(key)] = value
+            except (OSError, AttributeError, ValueError):
+                pass
+
+    def record(self, job_id: int, *, pages: int | None, copies: int, printer: str, created_at: int) -> None:
+        with self.lock:
+            previous = self.jobs.pop(job_id, None)
+            if pages:
+                self.jobs[job_id] = {
+                    "pages": pages, "copies": copies, "printer": printer, "created_at": created_at,
+                }
+            elif previous is None:
+                return
+            if len(self.jobs) > self.limit:
+                del self.jobs[next(iter(self.jobs))]
+            if self.path:
+                atomic_write(self.path, json.dumps(self.jobs, separators=(",", ":")).encode("utf-8"))
+
+    def snapshot(self) -> dict[int, JobPages]:
+        with self.lock:
+            return self.jobs.copy()

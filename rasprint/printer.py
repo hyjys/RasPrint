@@ -1,3 +1,4 @@
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from itertools import zip_longest
@@ -29,10 +30,18 @@ _PRINTER_ATTRIBUTES = [
 ]
 _JOB_ATTRIBUTES = [
     "job-id", "job-name", "job-printer-uri", "job-state", "job-state-reasons",
-    "job-state-message", "job-printer-state-message", "time-at-creation",
+    "job-state-message", "job-printer-state-message", "time-at-creation", "copies",
     "job-impressions", "job-impressions-completed", "job-media-sheets",
     "job-media-sheets-completed", "job-media-progress",
 ]
+_DocumentProgress = Mapping[int, Mapping[str, object]]
+_PROCESSING_PAGE = re.compile(
+    r"^\s*(?:(?:cfFilterGhostscript|Ghostscript|gstoraster|hpcups):\s*)?"
+    r"Processing\s+page\s+(?P<page>[1-9][0-9]{0,8})\b"
+    r"(?:\s*(?:of\s+|/\s*)(?P<total>[1-9][0-9]{0,8})\b)?"
+    r"(?:[\s,:(]+(?P<percent>[0-9]{1,3})\s*%)?",
+    re.IGNORECASE,
+)
 _HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 _IPP_ERRORS = {
     0x0401: ("CUPS가 이 요청을 허용하지 않습니다.", 403, "CUPS refused this request."),
@@ -91,40 +100,95 @@ def _ink_levels(attributes, language):
     ]
 
 
-def _job_progress(attributes, state):
-    impressions = _nonnegative(attributes.get("job-impressions"))
-    completed = _nonnegative(attributes.get("job-impressions-completed"))
-    if state == "completed":
-        return 100
-    if state == "pending":
-        return 0
-    # The CUPS percentage describes the current page, so only use it for one-page jobs.
-    if impressions == 1 and not completed and state == "processing":
-        current_page = _percent(attributes.get("job-media-progress"))
-        if current_page is not None:
-            return current_page
-    if impressions and completed is not None:
-        return min(100, completed * 100 // impressions)
+def _matching_document(attributes, printer, document):
+    if not document:
+        return {}
+    recorded_printer = document.get("printer")
+    recorded_time = _nonnegative(document.get("created_at"))
+    cups_time = _nonnegative(attributes.get("time-at-creation"))
+    if isinstance(recorded_printer, str) and printer and recorded_printer.casefold() != printer.casefold():
+        return {}
+    # A reset of the CUPS scheduler's spool can cause job IDs to be reused.
+    if recorded_time and cups_time and abs(recorded_time - cups_time) > 120:
+        return {}
+    return document
 
-    sheets = _nonnegative(attributes.get("job-media-sheets"))
-    sheets_completed = _nonnegative(attributes.get("job-media-sheets-completed"))
-    if sheets and sheets_completed is not None:
-        return min(100, sheets_completed * 100 // sheets)
 
+def _page_progress(attributes, document_pages, copies):
+    current_page = _percent(attributes.get("job-media-progress"))
+    output_pages = document_pages * copies if document_pages else None
+    for key in ("job-printer-state-message", "job-state-message"):
+        message = attributes.get(key)
+        if not isinstance(message, str) or not (match := _PROCESSING_PAGE.match(message)):
+            continue
+        page = int(match["page"])
+        reported_total = int(match["total"]) if match["total"] else None
+        if reported_total and output_pages and reported_total not in (document_pages, output_pages):
+            continue
+        total = output_pages or reported_total
+        # Ghostscript can announce the next page after the last one has rendered.
+        if total and page <= total + 1:
+            reported_percent = _percent(int(match["percent"])) if match["percent"] else None
+            fraction = reported_percent if reported_percent is not None else (current_page or 0)
+            # The page number is one-based. Driver-managed copies may share one raster pass.
+            done = (page - 1) * 100 + fraction
+            return min(99, done // total)
+    if output_pages == 1 and current_page is not None:
+        return min(99, current_page)
     return None
 
 
-def _job(job_id, attributes, language):
+def _counter_progress(total, completed):
+    if total and completed is not None and completed <= total:
+        return completed * 100 // total
+    return None
+
+
+def _job_progress(attributes, state, document):
+    if state == "completed":
+        return 100, False
+    if state == "pending":
+        return 0, False
+
+    copies = _nonnegative(attributes.get("copies")) or _nonnegative(document.get("copies")) or 1
+    pages = _nonnegative(document.get("pages"))
+    impressions = _nonnegative(attributes.get("job-impressions"))
+    completed = _nonnegative(attributes.get("job-impressions-completed"))
+    # IPP job-impressions excludes copies, whereas job-media-sheets includes them.
+    impressions_progress = _counter_progress(impressions * copies if impressions else None, completed)
+    sheets_progress = _counter_progress(
+        _nonnegative(attributes.get("job-media-sheets")),
+        _nonnegative(attributes.get("job-media-sheets-completed")),
+    )
+    native_progress = impressions_progress or sheets_progress
+    if native_progress:
+        return native_progress, False
+
+    if state == "processing":
+        if not impressions and pages and completed:
+            estimated = _counter_progress(pages * copies, completed)
+            if estimated is not None:
+                return min(99, estimated), True
+        estimated = _page_progress(attributes, pages or impressions, copies)
+        if estimated is not None:
+            return estimated, True
+    return (impressions_progress if impressions_progress is not None else sheets_progress), False
+
+
+def _job(job_id, attributes, language, document=None):
     state = _JOB_STATES.get(attributes.get("job-state"), "unknown")
     printer_uri = attributes.get("job-printer-uri") or ""
+    printer = unquote(urlsplit(printer_uri).path.rsplit("/", 1)[-1])
+    progress, estimated = _job_progress(attributes, state, _matching_document(attributes, printer, document))
     return {
         "id": job_id,
         "title": attributes.get("job-name") or localized(
             language, "인쇄 작업 #{id}", "Print job #{id}", id=job_id,
         ),
-        "printer": unquote(urlsplit(printer_uri).path.rsplit("/", 1)[-1]),
+        "printer": printer,
         "state": state,
-        "progress": _job_progress(attributes, state),
+        "progress": progress,
+        "progress_estimated": estimated,
         "created_at": _timestamp(attributes.get("time-at-creation")),
         "impressions": _nonnegative(attributes.get("job-impressions")),
         "impressions_completed": _nonnegative(attributes.get("job-impressions-completed")),
@@ -170,7 +234,10 @@ class CupsPrinter:
             names = sorted(connection.getPrinters(), key=str.casefold)
             return names, _queue_default(names, connection.getDefault())
 
-    def snapshot(self, language: str = "ko"):
+    def snapshot(
+        self, language: str = "ko",
+        document_progress: _DocumentProgress | Callable[[], _DocumentProgress] | None = None,
+    ):
         with self._connection() as (cups, connection):
             queues = connection.getPrinters()
             printers = []
@@ -201,7 +268,11 @@ class CupsPrinter:
                 which_jobs="completed", my_jobs=True, limit=_HISTORY_LIMIT,
                 requested_attributes=_JOB_ATTRIBUTES,
             )
-            jobs = [_job(job_id, attributes, language) for job_id, attributes in (active | history).items()]
+            documents = document_progress() if callable(document_progress) else (document_progress or {})
+            jobs = [
+                _job(job_id, attributes, language, documents.get(job_id))
+                for job_id, attributes in (active | history).items()
+            ]
             jobs.sort(key=lambda job: job["id"], reverse=True)
             names = [printer["id"] for printer in printers]
             return {
@@ -272,6 +343,7 @@ class DemoPrinter:
         return {
             "id": job_id, "title": title, "printer": printer or self._queue, "state": state,
             "progress": 100 if state == "completed" else 0, "created_at": _timestamp(created),
+            "progress_estimated": False,
             "impressions": None, "impressions_completed": None, "reasons": [], "message": "",
             "started": None, "duration": 12,
         }
@@ -298,7 +370,10 @@ class DemoPrinter:
             if queue not in self._queues:
                 self._queues.append(queue)
 
-    def snapshot(self, language: str = "ko"):
+    def snapshot(
+        self, language: str = "ko",
+        document_progress: _DocumentProgress | Callable[[], _DocumentProgress] | None = None,
+    ):
         with self._lock:
             busy = self._refresh(monotonic())
             queues = self._queues.copy()

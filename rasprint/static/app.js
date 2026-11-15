@@ -10,6 +10,9 @@ const themeForm = element('theme-form');
 const themeSelect = element('theme-select');
 const customThemeForm = element('custom-theme-form');
 const serverSettingsForm = element('server-settings-form');
+const printerRegistrationForm = element('printer-registration-form');
+const overlayForm = element('overlay-fs-form');
+const overlayRebootDialog = element('overlay-reboot-dialog');
 const hotspotForm = element('hotspot-form');
 const passwordChangeForm = element('password-change-form');
 const cancelDialog = element('cancel-dialog');
@@ -49,10 +52,12 @@ const themeColorLabels = {
 };
 const hex = /^#[\da-f]{6}$/i;
 const hotspotHostname = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
+const queueName = /^[a-z0-9][a-z0-9_.-]{0,126}$/i;
 const svgNamespace = 'http://www.w3.org/2000/svg';
 const feedbackIds = [
   'upload-feedback', 'login-feedback', 'theme-feedback', 'manage-feedback',
   'server-settings-feedback', 'hotspot-feedback', 'custom-theme-feedback', 'password-change-feedback',
+  'printer-registration-feedback', 'overlay-fs-feedback',
 ];
 const utf8 = new TextEncoder();
 
@@ -72,6 +77,11 @@ let cancelTarget = null;
 let maxUpload = 25;
 let extensions = ['pdf', 'jpg', 'jpeg', 'png', 'txt'];
 let adminSettings = null;
+let printerDiscovery = null;
+let printerSetupAction = '';
+let overlaySettings = null;
+let overlayRevision = 0;
+let overlayAction = '';
 let hotspotChange = null;
 let hotspotTimer = 0;
 let installedThemes = [];
@@ -108,6 +118,8 @@ function renderLanguage() {
   for (const item of document.querySelectorAll('[data-i18n-label]')) item.setAttribute('aria-label', t(item.dataset.i18nLabel));
   updateThemeButtons();
   renderThemePreview();
+  renderPrinterRegistration();
+  renderOverlaySettings();
   renderPageHeading();
   renderFile();
   renderInfo();
@@ -384,8 +396,9 @@ function renderSelectedPrinter() {
   optionalText('printer-model', printer?.model && printer.model !== printer.name ? printer.model : '');
   const meta = printer
     ? [printer.id === dashboard.default_printer ? t('defaultPrinter') : '', printer.accepting ? t('acceptingJobs') : t('rejectingJobs')].filter(Boolean).join(' · ')
-    : t('addCupsPrinter');
-  text('printer-meta', meta);
+    : '';
+  optionalText('printer-meta', meta);
+  element('register-printer-link').hidden = !!printer || !dashboard || dashboardFailed || !!dashboard.printer_error;
   const translated = reasonList(printer?.reasons);
   const reasonItems = translated.map((reason) => {
     const item = node('li', 'tone-warning');
@@ -611,6 +624,18 @@ function showSession(nextSession) {
     window.clearTimeout(hotspotTimer);
     installedThemes = [];
     serverSettingsForm.reset();
+    printerDiscovery = null;
+    printerSetupAction = '';
+    printerRegistrationForm.reset();
+    feedback('printer-registration-feedback');
+    renderPrinterRegistration();
+    overlaySettings = null;
+    overlayRevision++;
+    overlayAction = '';
+    overlayForm.reset();
+    if (overlayRebootDialog.open) overlayRebootDialog.close('later');
+    feedback('overlay-fs-feedback');
+    renderOverlaySettings();
     hotspotForm.reset();
     resetThemeEditor();
     passwordChangeForm.reset();
@@ -668,6 +693,7 @@ async function loadAdmin() {
       adminError('server-settings-feedback', error);
       if (!adminSettings && session.authenticated) adminError('hotspot-feedback', error);
     }),
+    loadOverlaySettings(),
   ]);
 }
 
@@ -693,6 +719,197 @@ function renderServerSettings(settings, preserveFields) {
   if (!preserveFields) controls.max_upload_mb.value = settings.max_upload_mb;
   optionalText('cups-settings-error', settings.printer_error);
   serverSettingsForm.querySelector('fieldset').disabled = false;
+}
+
+function renderPrinterRegistration(suggestQueue = false) {
+  const controls = printerRegistrationForm.elements;
+  const devices = printerDiscovery?.devices || [];
+  const selectedId = controls.device_id.value;
+  const current = devices.find((device) => device.id === selectedId) || devices[0];
+  const models = current?.models || [];
+  selectOptions(controls.device_id, devices.map((device) => [device.id, device.name]), current?.id);
+  selectOptions(controls.model_id, models.map((model) => [model.id, model.name]),
+    suggestQueue ? models[0]?.id : controls.model_id.value);
+  if (suggestQueue || current?.id !== selectedId || !controls.queue.value) {
+    controls.queue.value = current?.suggested_queue || '';
+  }
+
+  element('scan-usb-printers').disabled = !!printerSetupAction;
+  const fields = element('printer-registration-fields');
+  fields.hidden = !current;
+  fields.disabled = !!printerSetupAction || !current;
+  element('printer-registration-options').hidden = !models.length || !!current?.registered_queue;
+
+  const unavailable = printerDiscovery && !printerDiscovery.available;
+  let message = '';
+  if (printerSetupAction === 'scan') message = t('scanningUsbPrinters');
+  else if (unavailable) message = printerDiscovery.error || t('usbSetupUnavailable');
+  else if (printerDiscovery && !current) message = t('noUsbPrinters');
+  else if (current?.registered_queue) message = t('usbQueueExists', { queue: current.registered_queue });
+  else if (current && !models.length) message = t('noUsbDriver');
+  feedback('printer-discovery-feedback', message, unavailable ? 'error' : '');
+}
+
+async function scanUsbPrinters() {
+  if (!session.authenticated || printerSetupAction) return;
+  const csrf = session.csrf_token;
+  printerSetupAction = 'scan';
+  feedback('printer-registration-feedback');
+  renderPrinterRegistration();
+  try {
+    const result = await request('/api/admin/printer-devices', { admin: true });
+    if (session.csrf_token === csrf) printerDiscovery = result;
+  } catch (error) {
+    if (session.csrf_token === csrf) printerDiscovery = { available: false, error: errorText(error) };
+  } finally {
+    if (session.csrf_token === csrf) {
+      printerSetupAction = '';
+      renderPrinterRegistration();
+    }
+  }
+}
+
+async function registerUsbPrinter(event) {
+  event.preventDefault();
+  if (!session.authenticated || printerSetupAction) return;
+  const controls = printerRegistrationForm.elements;
+  const device = printerDiscovery?.devices?.find((entry) => entry.id === controls.device_id.value);
+  const model = device?.models.find((entry) => entry.id === controls.model_id.value);
+  if (!model || device.registered_queue) return;
+
+  const queue = controls.queue.value.trim();
+  if (!queueName.test(queue)) {
+    feedback('printer-registration-feedback', t('invalidNewQueue'), 'error');
+    controls.queue.focus();
+    return;
+  }
+  const csrf = session.csrf_token;
+  printerSetupAction = 'register';
+  feedback('printer-registration-feedback', t('registeringUsbPrinter'));
+  renderPrinterRegistration();
+  try {
+    const body = { device_id: device.id, model_id: model.id, queue };
+    const result = await request('/api/admin/printers', { method: 'POST', body, admin: true });
+    if (session.csrf_token !== csrf) return;
+    device.registered_queue = result.queue;
+    feedback('printer-registration-feedback', t('usbPrinterRegistered', { queue: result.queue }), 'success');
+    loadAdminSettings().catch((error) => adminError('server-settings-feedback', error));
+    if (dashboardRequest) await dashboardRequest;
+    refreshDashboard();
+  } catch (error) {
+    if (session.csrf_token === csrf) adminError('printer-registration-feedback', error);
+  } finally {
+    if (session.csrf_token === csrf) {
+      printerSetupAction = '';
+      renderPrinterRegistration();
+    }
+  }
+}
+
+function renderOverlaySettings() {
+  const available = !!overlaySettings?.available;
+  const proposed = overlayForm.elements.enabled.checked;
+  element('overlay-fs-fields').disabled = !available || !!overlayAction;
+  element('save-overlay-fs').disabled = !available || proposed === overlaySettings.configured ||
+    (proposed && overlaySettings.can_enable === false);
+  element('reboot-overlay-fs').hidden = !overlaySettings?.reboot_required;
+  element('overlay-fs-warning').hidden = !overlaySettings?.enabled;
+  const state = (enabled) => t(enabled ? 'overlayOn' : 'overlayOff');
+  optionalText('overlay-fs-status', available ? t('overlayStatus', {
+    current: state(overlaySettings.enabled),
+    configured: state(overlaySettings.configured),
+  }) : '');
+}
+
+function setOverlaySettings(settings) {
+  const previous = overlaySettings;
+  overlaySettings = settings;
+  if (!previous?.available || !settings?.available || settings.configured !== previous.configured) {
+    overlayForm.elements.enabled.checked = !!settings?.configured;
+  }
+  renderOverlaySettings();
+}
+
+async function loadOverlaySettings() {
+  if (!session.authenticated || overlayAction) return;
+  const revision = ++overlayRevision;
+  const requestedLanguage = language;
+  if (!overlaySettings) feedback('overlay-fs-feedback', t('checkingSettings'));
+  try {
+    const result = await request('/api/admin/overlay', { admin: true });
+    if (revision !== overlayRevision || requestedLanguage !== language || !session.authenticated) return;
+    setOverlaySettings(result);
+    if (!result.available) feedback('overlay-fs-feedback', result.error || t('overlayUnavailable'), 'error');
+    else if (result.reboot_required) feedback('overlay-fs-feedback', t('overlayPending'));
+    else if (result.error) feedback('overlay-fs-feedback', result.error, 'error');
+    else feedback('overlay-fs-feedback');
+  } catch (error) {
+    if (revision !== overlayRevision || requestedLanguage !== language || !session.authenticated) return;
+    setOverlaySettings(null);
+    feedback('overlay-fs-feedback', error.status === 404 ? t('overlayUnavailable') : errorText(error), 'error');
+  }
+}
+
+async function saveOverlaySettings(event) {
+  event.preventDefault();
+  const enabled = overlayForm.elements.enabled.checked;
+  if (!session.authenticated || !overlaySettings?.available || overlayAction ||
+      enabled === overlaySettings.configured || (enabled && overlaySettings.can_enable === false)) return;
+  const csrf = session.csrf_token;
+  let offerReboot = false;
+  overlayRevision++;
+  overlayAction = 'save';
+  renderOverlaySettings();
+  feedback('overlay-fs-feedback');
+  try {
+    const result = await request('/api/admin/overlay', { method: 'PUT', body: { enabled }, admin: true });
+    if (session.csrf_token !== csrf) return;
+    setOverlaySettings(result);
+    offerReboot = result.available && result.reboot_required;
+    if (!result.available) feedback('overlay-fs-feedback', result.error || t('overlayUnavailable'), 'error');
+    else feedback('overlay-fs-feedback', t(offerReboot ? 'overlayPending' : 'settingsSaved'), 'success');
+  } catch (error) {
+    if (session.csrf_token === csrf) adminError('overlay-fs-feedback', error);
+  } finally {
+    if (session.csrf_token === csrf) {
+      overlayAction = '';
+      renderOverlaySettings();
+    }
+  }
+  if (offerReboot && view === 'admin') showOverlayRebootDialog();
+}
+
+function showOverlayRebootDialog() {
+  if (!session.authenticated || !overlaySettings?.reboot_required || overlayAction || overlayRebootDialog.open) return;
+  overlayRebootDialog.returnValue = 'later';
+  element('overlay-reboot-warning').hidden = !overlaySettings.enabled;
+  overlayRebootDialog.showModal();
+}
+
+async function rebootForOverlay() {
+  if (overlayRebootDialog.returnValue !== 'restart' || !session.authenticated || !overlaySettings?.reboot_required || overlayAction) return;
+  const csrf = session.csrf_token;
+  overlayRevision++;
+  overlayAction = 'reboot';
+  renderOverlaySettings();
+  feedback('overlay-fs-feedback');
+  try {
+    const result = await request('/api/admin/overlay/reboot', { method: 'POST', admin: true });
+    if (session.csrf_token !== csrf) return;
+    if (result.demo || dashboard?.demo) {
+      setOverlaySettings({ ...overlaySettings, enabled: overlaySettings.configured, reboot_required: false });
+      feedback('overlay-fs-feedback', t('overlayDemoRestart'), 'success');
+    } else {
+      feedback('overlay-fs-feedback', t('overlayRestartScheduled'), 'success');
+      return;
+    }
+  } catch (error) {
+    if (session.csrf_token === csrf) adminError('overlay-fs-feedback', error);
+  }
+  if (session.csrf_token === csrf) {
+    overlayAction = '';
+    renderOverlaySettings();
+  }
 }
 
 function renderHotspotSettings(ap, preserveFields) {
@@ -1215,6 +1432,16 @@ element('edit-theme').addEventListener('click', editTheme);
 element('remove-theme').addEventListener('click', removeTheme);
 element('reset-theme-editor').addEventListener('click', resetThemeEditor);
 serverSettingsForm.addEventListener('submit', saveServerSettings);
+element('scan-usb-printers').addEventListener('click', scanUsbPrinters);
+printerRegistrationForm.elements.device_id.addEventListener('change', () => {
+  feedback('printer-registration-feedback');
+  renderPrinterRegistration(true);
+});
+printerRegistrationForm.addEventListener('submit', registerUsbPrinter);
+overlayForm.addEventListener('submit', saveOverlaySettings);
+overlayForm.elements.enabled.addEventListener('change', renderOverlaySettings);
+element('reboot-overlay-fs').addEventListener('click', showOverlayRebootDialog);
+overlayRebootDialog.addEventListener('close', rebootForOverlay);
 hotspotForm.elements.secured.addEventListener('change', toggleHotspotPassword);
 hotspotForm.addEventListener('submit', saveHotspot);
 passwordChangeForm.addEventListener('submit', changePassword);

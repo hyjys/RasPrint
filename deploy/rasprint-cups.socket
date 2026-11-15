@@ -1,0 +1,12 @@
+[Unit]
+Description=RasPrint USB printer setup socket
+
+[Socket]
+ListenStream=/run/rasprint-cups.sock
+SocketUser=root
+SocketGroup=rasprint
+SocketMode=0660
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

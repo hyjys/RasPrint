@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, StrictBool, ValidationError
 from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import parse_options_header
 from starlette.datastructures import UploadFile
@@ -28,8 +28,10 @@ from starlette.requests import ClientDisconnect
 from .ap import AccessPoint, AccessPointError, DemoAccessPoint, configured_hostname
 from .auth import AdminAuth
 from .config import STATIC_DIR, Settings
+from .cups_setup import CupsSetup, CupsSetupError, DemoCupsSetup
 from .documents import SUPPORTED_EXTENSIONS
 from .i18n import ApiError, language, localized, translate
+from .overlay import DemoOverlaySetup, OverlaySetup, OverlaySetupError
 from .printer import CupsPrinter, DemoPrinter, PrinterError
 from .state import PrintConfiguration, PrintSettings
 from .themes import DEFAULT_COLORS, LOGO_BYTES, THEME_BYTES, ThemeStore
@@ -84,6 +86,16 @@ class APInput(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=1024)
     new_password: str = Field(..., max_length=1024)
+
+
+class PrinterRegistration(BaseModel):
+    device_id: str = Field(..., min_length=1, max_length=256)
+    model_id: str = Field(..., min_length=1, max_length=256)
+    queue: str = Field(..., min_length=1, max_length=127)
+
+
+class OverlayInput(BaseModel):
+    enabled: StrictBool
 
 
 class UploadTooLarge(MultiPartException):
@@ -174,13 +186,22 @@ async def parse_upload(request: Request, max_body: int, max_field: int, too_big:
 
 def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="RasPrint", docs_url=None, redoc_url=None, openapi_url=None)
-    backend = DemoPrinter() if settings.demo else CupsPrinter()
+    if settings.demo:
+        backend = DemoPrinter()
+        cups_setup = DemoCupsSetup(lambda: backend.queues()[0], backend.add_queue)
+        overlay = DemoOverlaySetup()
+    else:
+        backend = CupsPrinter()
+        cups_setup = CupsSetup()
+        overlay = OverlaySetup()
     auth = AdminAuth(settings.admin_password, settings.secure_cookie, settings.state_dir)
     ap = DemoAccessPoint() if settings.demo else AccessPoint()
     printing = PrintSettings(settings.state_dir, PrintConfiguration(settings.max_upload_mb, settings.printer))
     themes = ThemeStore(settings.themes_dir, settings.state_dir, settings.theme)
     uploads = CapacityLimiter(2)
     password_workers = CapacityLimiter(2)
+    printer_setup_workers = CapacityLimiter(2)
+    overlay_workers = CapacityLimiter(2)
     cache_lock = Lock()
     dashboard_cache: dict[str, tuple[float, dict]] = {}
     allowed_hosts = {host.strip().lower() for host in os.getenv("RASPRINT_ALLOWED_HOSTS", "").split(",") if host.strip()}
@@ -225,7 +246,9 @@ def create_app(settings: Settings) -> FastAPI:
 
     @app.exception_handler(PrinterError)
     @app.exception_handler(AccessPointError)
-    async def printer_error(request: Request, exc: PrinterError | AccessPointError):
+    @app.exception_handler(CupsSetupError)
+    @app.exception_handler(OverlaySetupError)
+    async def operation_error(request: Request, exc: PrinterError | AccessPointError | CupsSetupError | OverlaySetupError):
         return JSONResponse({"detail": translate(request, str(exc), exc.english)}, status_code=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
@@ -423,6 +446,46 @@ def create_app(settings: Settings) -> FastAPI:
     def get_admin_settings(request: Request):
         auth.require(request)
         return admin_settings(language(request))
+
+    def localize_status(request: Request, result: dict):
+        english = result.pop("error_english", None)
+        if result.get("error") and english:
+            result["error"] = translate(request, result["error"], english)
+        return result
+
+    @app.get("/api/admin/printer-devices")
+    async def discover_printers(request: Request):
+        auth.require(request)
+        result = await to_thread.run_sync(cups_setup.discover, limiter=printer_setup_workers)
+        return localize_status(request, result)
+
+    @app.post("/api/admin/printers", status_code=201)
+    async def register_printer(request: Request):
+        auth.require(request, csrf=True)
+        data = await admin_input(request, PrinterRegistration)
+        result = await to_thread.run_sync(
+            cups_setup.register, data.device_id, data.model_id, data.queue, limiter=printer_setup_workers,
+        )
+        await to_thread.run_sync(invalidate_dashboard)
+        return result
+
+    @app.get("/api/admin/overlay")
+    async def overlay_status(request: Request):
+        auth.require(request)
+        result = await to_thread.run_sync(overlay.status, limiter=overlay_workers)
+        return localize_status(request, result)
+
+    @app.put("/api/admin/overlay")
+    async def configure_overlay(request: Request):
+        auth.require(request, csrf=True)
+        data = await admin_input(request, OverlayInput)
+        result = await to_thread.run_sync(overlay.set_enabled, data.enabled, limiter=overlay_workers)
+        return localize_status(request, result)
+
+    @app.post("/api/admin/overlay/reboot", status_code=202)
+    async def restart_for_overlay(request: Request):
+        auth.require(request, csrf=True)
+        return await to_thread.run_sync(overlay.reboot, limiter=overlay_workers)
 
     @app.put("/api/admin/settings")
     async def save_print_settings(request: Request):

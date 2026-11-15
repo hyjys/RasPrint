@@ -258,6 +258,7 @@ class DemoPrinter:
 
     def __init__(self):
         self._lock = Lock()
+        self._queues = [self._queue]
         self._next_id = 14
         self._jobs = {
             11: self._new_job(11, self._sample_titles[11][0], "aborted", time() - 300),
@@ -267,31 +268,40 @@ class DemoPrinter:
         self._jobs[11]["reasons"] = ["media-jam"]
         self._jobs[13].update(started=monotonic() - 80, duration=180)
 
-    def _new_job(self, job_id, title, state, created):
+    def _new_job(self, job_id, title, state, created, printer=None):
         return {
-            "id": job_id, "title": title, "printer": self._queue, "state": state,
+            "id": job_id, "title": title, "printer": printer or self._queue, "state": state,
             "progress": 100 if state == "completed" else 0, "created_at": _timestamp(created),
             "impressions": None, "impressions_completed": None, "reasons": [], "message": "",
             "started": None, "duration": 12,
         }
 
     def _refresh(self, now):
-        busy = False
+        busy = set()
         for job in self._jobs.values():
-            if job["state"] == "pending" and not busy:
+            printer = job["printer"]
+            if job["state"] == "pending" and printer not in busy:
                 job.update(state="processing", started=now)
             if job["state"] == "processing":
                 progress = min(100, int(100 * (now - job["started"]) / job["duration"]))
                 job.update(progress=progress, state="completed" if progress == 100 else "processing")
-                busy = job["state"] == "processing"
+                if job["state"] == "processing":
+                    busy.add(printer)
         return busy
 
     def queues(self):
-        return [self._queue], self._queue
+        with self._lock:
+            return self._queues.copy(), self._queue
+
+    def add_queue(self, queue: str):
+        with self._lock:
+            if queue not in self._queues:
+                self._queues.append(queue)
 
     def snapshot(self, language: str = "ko"):
         with self._lock:
             busy = self._refresh(monotonic())
+            queues = self._queues.copy()
             jobs = [
                 {key: value for key, value in job.items() if key not in ("started", "duration")}
                 for job in reversed(self._jobs.values())
@@ -301,22 +311,23 @@ class DemoPrinter:
                 job["title"] = localized(language, *self._sample_titles[job["id"]])
         return {
             "printers": [{
-                "id": self._queue, "name": "HP OfficeJet Pro 8710", "model": "HP OfficeJet Pro 8710",
-                "state": "processing" if busy else "idle", "accepting": True, "reasons": [],
+                "id": queue, "name": "HP OfficeJet Pro 8710" if queue == self._queue else queue,
+                "model": "HP OfficeJet Pro 8710",
+                "state": "processing" if queue in busy else "idle", "accepting": True, "reasons": [],
                 "message": "", "ink": [
                     {"name": localized(language, korean, english), "level": level, "color": color}
                     for korean, english, level, color in self._demo_ink
                 ],
-            }],
+            } for queue in queues],
             "default_printer": self._queue,
             "jobs": jobs,
         }
 
     def submit(self, printer: str, path: Path, title: str, options: dict[str, str]) -> int:
         validate_document(path)
-        if printer != self._queue:
-            raise PrinterError("선택한 프린터를 찾을 수 없습니다.", 404, "The selected printer could not be found.")
         with self._lock:
+            if printer not in self._queues:
+                raise PrinterError("선택한 프린터를 찾을 수 없습니다.", 404, "The selected printer could not be found.")
             now = monotonic()
             sample = self._jobs.get(13)
             if sample and sample["state"] == "processing":
@@ -327,7 +338,7 @@ class DemoPrinter:
                 del self._jobs[job_id]
             job_id = self._next_id
             self._next_id += 1
-            self._jobs[job_id] = self._new_job(job_id, title, "pending", time())
+            self._jobs[job_id] = self._new_job(job_id, title, "pending", time(), printer)
             return job_id
 
     def cancel(self, job_id: int) -> None:

@@ -341,6 +341,10 @@ h1 { font-size: clamp(24px, 2.65vw, 32px); font-weight: 820; line-height: 1.25; 
 .setting-check { display: flex; align-items: flex-start; gap: 8px; min-height: 30px; font-size: 13px; }
 .setting-check input { width: 16px; height: 16px; flex: 0 0 16px; margin: 2px 0 0; accent-color: var(--primary); }
 .settings-feedback:not(:empty) { margin-top: 10px; }
+.printer-registration-fields:not([hidden]) { margin-top: 14px; }
+.print-setup-link { align-self: flex-start; }
+.overlay-fs-warning { margin-block: 6px 10px; }
+#overlay-fs-status:not([hidden]) + .overlay-fs-warning[hidden] + fieldset { margin-top: 10px; }
 .hotspot-hostname { display: flex; align-items: center; gap: 7px; }
 .hotspot-hostname > span { color: var(--muted); font-size: 13px; font-weight: 500; }
 .hotspot-addresses { display: grid; gap: 6px; margin-top: 10px; color: var(--muted); font-size: 12px; }

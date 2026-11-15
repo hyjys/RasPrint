@@ -26,7 +26,13 @@ sudoedit /etc/rasprint/rasprint.env
 
 기존 설치를 업데이트하려면 Pi를 인터넷에 연결한 상태에서 최신 소스의 `sudo bash deploy/install.sh`를 실행하세요. 웹 서비스와 AP 설정 서비스가 함께 업데이트됩니다.
 
+Pi가 자체 AP로 동작 중이면 PC에서 최신 소스를 복사한 뒤 `sudo bash deploy/install.sh --offline`로 업데이트할 수 있습니다. 기존 Python 환경을 사용합니다. 프린터 드라이버나 `overlayroot`가 빠져 있다면 Pi가 인터넷에 연결된 상태에서 설치해야 합니다. Overlay FS가 켜져 있다면 업데이트를 유지하려면 먼저 끄고 재부팅하세요.
+
 ### 2. CUPS 프린터 연결
+
+3단계에서 AP를 시작한 뒤 전원을 켠 프린터를 Pi의 USB 데이터 단자에 연결하세요. **관리자 → 인쇄 설정 → USB 프린터 등록**에서 **USB 프린터 찾기**를 누르고, 장치와 드라이버를 선택해 큐를 등록합니다. 기존에 특정 큐로 제한했다면 인쇄 설정에서 새 큐를 선택하거나 자동으로 바꾸세요.
+
+설치 스크립트에는 HP OfficeJet Pro 8710을 지원하는 hpcups 드라이버가 포함됩니다. 장치는 보이지만 드라이버가 없으면 Pi에 해당 CUPS 드라이버를 설치한 뒤 다시 검색하세요. 장치가 아예 보이지 않거나 AP로 전환하기 전에 큐를 등록하려면 아래 명령을 사용합니다.
 
 ```bash
 lsusb
@@ -120,6 +126,8 @@ sudo nmcli connection up id '기존 Wi-Fi 프로필 이름'
 
 **로컬 웹 주소**에 `office-print`를 입력하면 RasPrint Wi-Fi에서 `http://office-print.local/`로 접속할 수 있습니다. 영문, 숫자, 하이픈을 1~63자 쓸 수 있으며 첫 글자와 마지막 글자는 영문이나 숫자여야 합니다. 웹 주소만 바꾸면 Wi-Fi 연결이 유지됩니다. 화면에 안내된 새 주소를 열고 다시 로그인하세요. 기존 IP와 직접 포트로도 계속 접속할 수 있습니다. Raspberry Pi OS의 기본 Overlay FS를 켠 동안 바꾼 주소는 재부팅하면 이전 값으로 돌아갑니다. [Overlay FS 동작](https://www.raspberrypi.com/documentation/computers/configuration.html#enable-or-disable-overlay-file-system)
 
+**Overlay FS**에서 다음 부팅에 적용할 설정을 바꿀 수 있습니다. 저장하면 지금 재시작할지 나중에 할지 묻습니다. 인쇄 작업이 끝난 뒤 재시작하세요. RAM 기반 Overlay FS가 켜져 있는 동안 바꾼 프린터 큐, 비밀번호, AP 설정과 테마는 재부팅할 때 사라지므로 Overlay FS를 켜기 전에 설정하세요. [Raspberry Pi Overlay FS](https://www.raspberrypi.com/documentation/computers/configuration.html#enable-or-disable-overlay-file-system)
+
 관리자 비밀번호는 현재 비밀번호를 확인한 뒤 변경합니다. 변경하면 모든 관리자 세션이 만료됩니다. 초기 설정은 `sudoedit /etc/rasprint/rasprint.env`로 바꾼 뒤 `sudo systemctl restart rasprint.service`를 실행합니다. 웹에서 저장한 인쇄 설정과 관리자 비밀번호가 초기값에 우선합니다. 관리자 암호를 잊었다면 Pi 콘솔에서 환경 파일에 새 비밀번호를 설정하고, 서비스를 중지한 뒤 `/var/lib/rasprint/admin-password`를 삭제하고 서비스를 다시 시작하세요.
 
 | 환경 변수 | 기본값 | 설명 |
@@ -182,7 +190,7 @@ RASPRINT_DEMO=true .venv/bin/python -m uvicorn rasprint.main:app --host 127.0.0.
 
 ```bash
 systemctl status rasprint.socket rasprint.service cups.service
-journalctl -u rasprint-ap.service -u rasprint-proxy.service -u rasprint-mdns.service -n 50 --no-pager
+journalctl -u rasprint-ap.service -u rasprint-proxy.service -u rasprint-mdns.service -u rasprint-cups.service -u rasprint-overlay.service -n 50 --no-pager
 journalctl -u rasprint.service -n 50 --no-pager
 journalctl -u cups.service -n 50 --no-pager
 lpstat -t

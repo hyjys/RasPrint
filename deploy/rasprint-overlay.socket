@@ -1,0 +1,12 @@
+[Unit]
+Description=RasPrint OverlayFS setup socket
+
+[Socket]
+ListenStream=/run/rasprint-overlay.sock
+SocketUser=root
+SocketGroup=rasprint
+SocketMode=0660
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

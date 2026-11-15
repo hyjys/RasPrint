@@ -6,7 +6,7 @@ RasPrint is a FastAPI server for printing to a USB printer attached to a Raspber
 
 - Upload PDF, JPEG, PNG, or UTF-8 TXT files. Use a PDF with embedded fonts to preserve the original layout.
 - View queued jobs, print progress, ink levels, and printer errors such as paper jams or an empty tray. The available readings depend on the printer and its CUPS driver.
-- The admin menu lets you change the access point, HTTP port, upload limit, CUPS queue, admin password, and themes. Anyone joined to the Wi-Fi network can submit jobs and see their names and status.
+- The admin menu lets you register USB printers and change the access point, HTTP port, upload limit, CUPS queue, admin password, and themes. Anyone joined to the Wi-Fi network can submit jobs and see their names and status.
 - The interface supports English, Korean, Japanese, Simplified Chinese, Spanish, French, German, and Russian. Choose a language in the sidebar.
 
 ## Install on a Raspberry Pi Zero W
@@ -26,9 +26,13 @@ sudoedit /etc/rasprint/rasprint.env
 
 If you already installed RasPrint, rerun `sudo bash deploy/install.sh` from the updated source while the Pi has internet access. The updated web service and AP helper are installed together.
 
+For a Pi already running RasPrint on its own Wi-Fi, transfer the updated source from a computer and run `sudo bash deploy/install.sh --offline`. This reuses the existing Python environments. A missing CUPS driver or `overlayroot` still needs to be installed while the Pi has internet access. If Overlay FS is active, disable it and reboot before installing a permanent update.
+
 ### 2. Add a CUPS printer
 
-Check that `lsusb` lists the printer. Use `sudo lpinfo -v` to discover printer connections and `lpstat -p -d` to inspect existing queues. RasPrint can use any compatible local CUPS queue. [CUPS administration](https://openprinting.github.io/cups/doc/admin.html)
+After starting the access point in step 3, connect the powered-on printer to the Pi's USB data port using an OTG adapter. In RasPrint, sign in and open **Admin → Print settings → Register USB printer**. Choose **Find USB printers**, select the device and a driver, then register the queue. The main screen lists the new queue. If you previously restricted RasPrint to one queue, select the new queue or choose Automatic in Print settings.
+
+If the scan finds a device with no compatible driver, install its CUPS driver on the Pi and scan again. The installer includes the HP hpcups driver for models such as the OfficeJet Pro 8710. If the scan finds no device, run `lsusb` to confirm the USB connection and `sudo lpinfo -v` to inspect device discovery. The CLI procedures below also let you add a queue before switching to the access point. [CUPS administration](https://openprinting.github.io/cups/doc/admin.html)
 
 #### HP OfficeJet Pro 8710
 
@@ -107,6 +111,7 @@ Sign in from the **Admin** menu to change:
 - **Print settings.** Set a per-file upload limit of 1–100 MiB and choose a CUPS queue or allow users to choose from all configured queues.
 - **Wi-Fi and HTTP.** Set a network name, enable or disable WPA2, and set the Wi-Fi password. Enter a password when enabling WPA2 or renaming a protected Wi-Fi network. The direct HTTP port can be any available port from 1 to 65535 except 80, which serves the local web address. An open AP allows nearby users to join and submit print jobs.
 - **Local web address.** Enter a name such as `office-print` to use `http://office-print.local/` on the RasPrint Wi-Fi. Use 1–63 ASCII letters, digits, or hyphens. The first and last characters must be letters or digits. Changing just this name keeps the Wi-Fi connection up. Open the new address shown after saving and sign in again. The direct IP address and configured port also work. With Raspberry Pi OS's RAM-backed Overlay FS, the change lasts until reboot. [Overlay FS behavior](https://www.raspberrypi.com/documentation/computers/configuration.html#enable-or-disable-overlay-file-system)
+- **Overlay file system.** Change the root file system setting for the next boot. After saving, choose whether to restart now or later. Finish any print jobs before restarting. While Raspberry Pi OS uses its RAM-backed overlay, changes to printer queues, passwords, AP settings, and themes are lost at reboot. Configure these before turning Overlay FS on. [Raspberry Pi Overlay FS](https://www.raspberrypi.com/documentation/computers/configuration.html#enable-or-disable-overlay-file-system)
 - **Admin password.** Enter the current password and a new password of 8–1024 UTF-8 bytes. Saving revokes every admin session. RasPrint stores a salted password hash in its state directory.
 
 Use `sudoedit /etc/rasprint/rasprint.env` and `sudo systemctl restart rasprint.service` to configure defaults. Saved print settings and the saved admin password take precedence over the environment. To recover the admin account from the Pi console, set a new value for `RASPRINT_ADMIN_PASSWORD` in the environment file, stop `rasprint.service`, remove `/var/lib/rasprint/admin-password`, and start the service again.
@@ -169,7 +174,7 @@ RASPRINT_DEMO=true .venv/bin/python -m uvicorn rasprint.main:app --host 127.0.0.
 
 ```bash
 systemctl status rasprint.socket rasprint.service cups.service
-journalctl -u rasprint-ap.service -u rasprint-proxy.service -u rasprint-mdns.service -n 50 --no-pager
+journalctl -u rasprint-ap.service -u rasprint-proxy.service -u rasprint-mdns.service -u rasprint-cups.service -u rasprint-overlay.service -n 50 --no-pager
 journalctl -u rasprint.service -n 50 --no-pager
 journalctl -u cups.service -n 50 --no-pager
 lpstat -t

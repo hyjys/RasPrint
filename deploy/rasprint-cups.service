@@ -1,0 +1,19 @@
+[Unit]
+Description=RasPrint USB printer setup service
+Requires=rasprint-cups.socket
+Wants=cups.service
+After=cups.service rasprint-cups.socket
+PartOf=rasprint-cups.socket
+
+[Service]
+Type=exec
+WorkingDirectory=/opt/rasprint
+Sockets=rasprint-cups.socket
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -m deploy.cups_setup
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict

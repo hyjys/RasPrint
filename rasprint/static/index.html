@@ -139,6 +139,7 @@
                 </div>
                 <p id="printer-model" class="small muted" hidden></p>
                 <p id="printer-meta" class="small muted"></p>
+                <a id="register-printer-link" class="button button-link print-setup-link" href="#admin" data-i18n="registerUsbPrinter" hidden></a>
                 <ul id="printer-reasons" class="reason-list" hidden></ul>
                 <p id="printer-message" class="small muted" hidden></p>
               </div>
@@ -182,15 +183,32 @@
           <div class="admin-settings-grid">
             <section class="card" aria-labelledby="server-settings-title">
               <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-printer"/></svg></span><div><h2 id="server-settings-title" data-i18n="serverSettings"></h2><p data-i18n="serverSettingsDescription"></p></div></header>
-              <form id="server-settings-form" class="card-body" novalidate>
-                <fieldset class="form-fields admin-fields" disabled>
-                  <label class="field"><span id="cups-queue-label" data-i18n="cupsQueue"></span><select name="printer" aria-labelledby="cups-queue-label"><option value="" data-i18n="automaticQueue"></option></select></label>
-                  <p id="cups-settings-error" class="small muted" role="status" hidden></p>
-                  <label class="field"><span data-i18n="maxUpload"></span><input type="number" name="max_upload_mb" min="1" max="100" step="1" inputmode="numeric" required></label>
-                  <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="saveSettings"></button></div>
-                </fieldset>
-                <p id="server-settings-feedback" class="feedback settings-feedback" role="status"></p>
-              </form>
+              <div class="card-body">
+                <form id="server-settings-form" novalidate>
+                  <fieldset class="form-fields admin-fields" disabled>
+                    <label class="field"><span id="cups-queue-label" data-i18n="cupsQueue"></span><select name="printer" aria-labelledby="cups-queue-label"><option value="" data-i18n="automaticQueue"></option></select></label>
+                    <p id="cups-settings-error" class="small muted" role="status" hidden></p>
+                    <label class="field"><span data-i18n="maxUpload"></span><input type="number" name="max_upload_mb" min="1" max="100" step="1" inputmode="numeric" required></label>
+                    <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="saveSettings"></button></div>
+                  </fieldset>
+                  <p id="server-settings-feedback" class="feedback settings-feedback" role="status"></p>
+                </form>
+                <form id="printer-registration-form" class="embedded-form" aria-labelledby="printer-registration-title" novalidate>
+                  <h3 id="printer-registration-title" data-i18n="registerUsbPrinter"></h3>
+                  <p class="small muted" data-i18n="usbSetupHelp"></p>
+                  <div class="form-footer"><button id="scan-usb-printers" class="button" type="button"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><span data-i18n="scanUsbPrinters"></span></button></div>
+                  <fieldset id="printer-registration-fields" class="form-fields admin-fields printer-registration-fields" hidden disabled>
+                    <label class="field"><span data-i18n="usbDevice"></span><select name="device_id" required></select></label>
+                    <div id="printer-registration-options" class="admin-fields" hidden>
+                      <label class="field"><span data-i18n="printerDriver"></span><select name="model_id" required></select></label>
+                      <label class="field"><span id="new-queue-label" data-i18n="newQueueName"></span><input name="queue" maxlength="127" autocapitalize="off" spellcheck="false" autocomplete="off" aria-labelledby="new-queue-label" required></label>
+                      <div class="form-footer"><button class="button button-primary" type="submit" data-i18n="createPrinterQueue"></button></div>
+                    </div>
+                  </fieldset>
+                  <p id="printer-discovery-feedback" class="feedback settings-feedback" role="status"></p>
+                  <p id="printer-registration-feedback" class="feedback settings-feedback" role="status"></p>
+                </form>
+              </div>
             </section>
 
             <section class="card" aria-labelledby="hotspot-title">
@@ -268,6 +286,21 @@
                 <p id="password-change-feedback" class="feedback settings-feedback" role="status"></p>
               </form>
             </section>
+            <section class="card" aria-labelledby="overlay-fs-title">
+              <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-shield"/></svg></span><div><h2 id="overlay-fs-title">OverlayFS</h2><p data-i18n="overlaySetupDescription"></p></div></header>
+              <form id="overlay-fs-form" class="card-body" novalidate>
+                <p id="overlay-fs-status" class="small muted" hidden></p>
+                <p id="overlay-fs-warning" class="small muted overlay-fs-warning" data-i18n="overlayVolatileWarning" hidden></p>
+                <fieldset id="overlay-fs-fields" class="form-fields admin-fields" disabled>
+                  <label class="setting-check"><input name="enabled" type="checkbox"> <span data-i18n="overlayEnable"></span></label>
+                  <div class="form-footer">
+                    <button id="save-overlay-fs" class="button button-primary" type="submit" data-i18n="saveSettings"></button>
+                    <button id="reboot-overlay-fs" class="button" type="button" data-i18n="overlayRestart" hidden></button>
+                  </div>
+                </fieldset>
+                <p id="overlay-fs-feedback" class="feedback settings-feedback" role="status"></p>
+              </form>
+            </section>
           </div>
           <section class="card queue-card" aria-labelledby="manage-title">
             <header class="card-header"><span class="section-icon"><svg class="icon"><use href="#i-list"/></svg></span><div><h2 id="manage-title" data-i18n="manageJobs"></h2><p id="manage-count"></p></div></header>
@@ -285,6 +318,15 @@
     <form method="dialog" class="dialog-actions">
       <button class="button" value="close" data-i18n="close" autofocus></button>
       <button class="button button-danger" value="cancel-job" data-i18n="cancelJob"></button>
+    </form>
+  </dialog>
+  <dialog id="overlay-reboot-dialog" class="confirm-dialog" aria-labelledby="overlay-reboot-title" aria-describedby="overlay-reboot-description">
+    <h2 id="overlay-reboot-title" data-i18n="overlayRestartConfirm"></h2>
+    <p id="overlay-reboot-description" data-i18n="overlayRestartDescription"></p>
+    <p id="overlay-reboot-warning" data-i18n="overlayVolatileWarning" hidden></p>
+    <form method="dialog" class="dialog-actions">
+      <button class="button" value="later" data-i18n="overlayRestartLater" autofocus></button>
+      <button class="button button-primary" value="restart" data-i18n="overlayRestartNow"></button>
     </form>
   </dialog>
   <noscript>RasPrint를 사용하려면 브라우저에서 자바스크립트를 켜세요. <span lang="en">Enable JavaScript to use RasPrint.</span></noscript>

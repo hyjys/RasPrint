@@ -1,0 +1,19 @@
+[Unit]
+Description=RasPrint OverlayFS setup helper
+Requires=rasprint-overlay.socket
+After=rasprint-overlay.socket
+PartOf=rasprint-overlay.socket
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/opt/rasprint
+ExecStart=/usr/bin/python3 -m deploy.overlay_helper
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/vc/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+Sockets=rasprint-overlay.socket
+UMask=0077
+NoNewPrivileges=yes
+# raspi-config uses vcgencmd and may remount the physical firmware partition.
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_FOWNER
